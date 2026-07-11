@@ -15,6 +15,20 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(themeMode.rawValue, forKey: StorageKey.themeMode) }
     }
 
+    @Published var categoriesByGroup: [String: [String]] {
+        didSet { Self.save(categoriesByGroup, key: StorageKey.categories) }
+    }
+
+    @Published var enabledCharts: [DashboardChartKind] {
+        didSet { Self.save(enabledCharts, key: StorageKey.enabledCharts) }
+    }
+
+    @Published var isCatPopupEnabled: Bool {
+        didSet { UserDefaults.standard.set(isCatPopupEnabled, forKey: StorageKey.catPopupEnabled) }
+    }
+
+    @Published var catPopup: String?
+
     private let calendar = Calendar.current
 
     init() {
@@ -23,6 +37,10 @@ final class AppState: ObservableObject {
 
         let storedTheme = UserDefaults.standard.string(forKey: StorageKey.themeMode)
         themeMode = AppThemeMode(rawValue: storedTheme ?? "") ?? .system
+        categoriesByGroup = Self.load([String: [String]].self, key: StorageKey.categories) ?? Self.defaultCategories
+        enabledCharts = Self.load([DashboardChartKind].self, key: StorageKey.enabledCharts) ?? DashboardChartKind.allCases
+        isCatPopupEnabled = UserDefaults.standard.object(forKey: StorageKey.catPopupEnabled) as? Bool ?? true
+        catPopup = nil
     }
 
     var monthlyEntries: [FinanceEntry] {
@@ -52,12 +70,52 @@ final class AppState: ObservableObject {
             .sorted { $0.total > $1.total }
     }
 
+    var monthlyTrend: [MonthSummary] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "tr_TR")
+        formatter.dateFormat = "MMM"
+
+        return (0..<6).reversed().compactMap { offset in
+            guard let monthDate = calendar.date(byAdding: .month, value: -offset, to: .now) else { return nil }
+            let entriesInMonth = entries.filter { calendar.isDate($0.date, equalTo: monthDate, toGranularity: .month) }
+            return MonthSummary(
+                month: formatter.string(from: monthDate),
+                income: total(for: .income, in: entriesInMonth),
+                expense: total(for: .expense, in: entriesInMonth)
+            )
+        }
+    }
+
+    var weeklyExpenseTrend: [WeekSummary] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "tr_TR")
+        formatter.dateFormat = "d MMM"
+
+        return (0..<4).reversed().compactMap { offset in
+            guard let weekDate = calendar.date(byAdding: .weekOfYear, value: -offset, to: .now) else { return nil }
+            let entriesInWeek = entries.filter {
+                $0.kind == .expense && calendar.isDate($0.date, equalTo: weekDate, toGranularity: .weekOfYear)
+            }
+            return WeekSummary(week: formatter.string(from: weekDate), expense: entriesInWeek.reduce(0) { $0 + $1.amount })
+        }
+    }
+
     var recurringEntries: [FinanceEntry] {
         entries.filter { $0.cadence == .recurring }
     }
 
     func addEntry(_ entry: FinanceEntry) {
         entries.insert(entry, at: 0)
+        showCatPopup(for: entry.kind)
+    }
+
+    func updateEntry(_ entry: FinanceEntry) {
+        guard let index = entries.firstIndex(where: { $0.id == entry.id }) else { return }
+        entries[index] = entry
+    }
+
+    func deleteEntry(_ entry: FinanceEntry) {
+        entries.removeAll { $0.id == entry.id }
     }
 
     func addHolding(_ holding: AssetHolding) {
@@ -69,6 +127,34 @@ final class AppState: ObservableObject {
         case .system: nil
         case .light: .light
         case .dark: .dark
+        }
+    }
+
+    func categories(for kind: MoneyFlowKind, cadence: EntryCadence) -> [String] {
+        categoriesByGroup[CategoryGroup(kind: kind, cadence: cadence).storageKey] ?? []
+    }
+
+    func addCategory(_ category: String, kind: MoneyFlowKind, cadence: EntryCadence) {
+        let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let key = CategoryGroup(kind: kind, cadence: cadence).storageKey
+        var categories = categoriesByGroup[key] ?? []
+        guard !categories.contains(where: { $0.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+        categories.append(trimmed)
+        categoriesByGroup[key] = categories.sorted { $0.localizedCompare($1) == .orderedAscending }
+    }
+
+    func deleteCategory(_ category: String, kind: MoneyFlowKind, cadence: EntryCadence) {
+        let key = CategoryGroup(kind: kind, cadence: cadence).storageKey
+        categoriesByGroup[key]?.removeAll { $0 == category }
+    }
+
+    func toggleChart(_ chart: DashboardChartKind) {
+        if enabledCharts.contains(chart) {
+            enabledCharts.removeAll { $0 == chart }
+        } else {
+            enabledCharts.append(chart)
         }
     }
 
@@ -86,6 +172,11 @@ final class AppState: ObservableObject {
         Self.save(holdings, key: StorageKey.holdings)
     }
 
+    private func showCatPopup(for kind: MoneyFlowKind) {
+        guard isCatPopupEnabled else { return }
+        catPopup = kind == .income ? "😺 Gelir eklendi" : "😿 Harcama eklendi"
+    }
+
     private static func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
@@ -101,4 +192,18 @@ private enum StorageKey {
     static let entries = "harcamac.entries"
     static let holdings = "harcamac.holdings"
     static let themeMode = "harcamac.themeMode"
+    static let categories = "harcamac.categories"
+    static let enabledCharts = "harcamac.enabledCharts"
+    static let catPopupEnabled = "harcamac.catPopupEnabled"
+}
+
+private extension AppState {
+    static var defaultCategories: [String: [String]] {
+        var result: [String: [String]] = [:]
+        result[CategoryGroup(kind: .expense, cadence: .oneTime).storageKey] = ["Market", "Ulaşım", "Yeme İçme", "Sağlık", "Sosyal", "Alışveriş"]
+        result[CategoryGroup(kind: .expense, cadence: .recurring).storageKey] = ["Kira", "Fatura", "Abonelik", "Aidat", "Sigorta"]
+        result[CategoryGroup(kind: .income, cadence: .oneTime).storageKey] = ["Ek Gelir", "Satış", "Prim", "Hediye"]
+        result[CategoryGroup(kind: .income, cadence: .recurring).storageKey] = ["Maaş", "Kira Geliri", "Temettü", "Faiz"]
+        return result
+    }
 }

@@ -11,7 +11,7 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
                     summaryGrid
-                    expenseChart
+                    chartSections
                     recentEntries
                 }
                 .padding()
@@ -69,7 +69,27 @@ struct DashboardView: View {
         }
     }
 
-    private var expenseChart: some View {
+    @ViewBuilder
+    private var chartSections: some View {
+        if appState.enabledCharts.isEmpty {
+            InfoCard(title: "Grafik yok", systemImage: "chart.bar", message: "Ayarlar ekranından özet grafiklerini açabilirsin.")
+        } else {
+            ForEach(appState.enabledCharts) { chart in
+                switch chart {
+                case .monthlyExpensePie:
+                    expensePieChart
+                case .monthlyIncomeExpenseBar:
+                    monthlyIncomeExpenseChart
+                case .weeklyExpenseBar:
+                    weeklyExpenseChart
+                case .categoryExpenseBar:
+                    categoryExpenseBarChart
+                }
+            }
+        }
+    }
+
+    private var expensePieChart: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Kategori Dağılımı")
                 .font(.headline)
@@ -109,6 +129,83 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
+    private var monthlyIncomeExpenseChart: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Aylara Göre Gelir ve Gider")
+                .font(.headline)
+
+            if appState.monthlyTrend.allSatisfy({ $0.income == 0 && $0.expense == 0 }) {
+                ContentUnavailableView("Grafik için kayıt yok", systemImage: "chart.bar")
+            } else {
+                Chart(appState.monthlyTrend) { item in
+                    BarMark(
+                        x: .value("Ay", item.month),
+                        y: .value("Gelir", NSDecimalNumber(decimal: item.income).doubleValue)
+                    )
+                    .foregroundStyle(AppTheme.income)
+                    .position(by: .value("Tip", "Gelir"))
+
+                    BarMark(
+                        x: .value("Ay", item.month),
+                        y: .value("Gider", NSDecimalNumber(decimal: item.expense).doubleValue)
+                    )
+                    .foregroundStyle(AppTheme.expense)
+                    .position(by: .value("Tip", "Gider"))
+                }
+                .frame(height: 220)
+            }
+        }
+        .padding()
+        .background(AppTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var weeklyExpenseChart: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Haftalık Harcama")
+                .font(.headline)
+
+            if appState.weeklyExpenseTrend.allSatisfy({ $0.expense == 0 }) {
+                ContentUnavailableView("Haftalık gider yok", systemImage: "chart.bar.xaxis")
+            } else {
+                Chart(appState.weeklyExpenseTrend) { item in
+                    BarMark(
+                        x: .value("Hafta", item.week),
+                        y: .value("Gider", NSDecimalNumber(decimal: item.expense).doubleValue)
+                    )
+                    .foregroundStyle(AppTheme.expense)
+                }
+                .frame(height: 200)
+            }
+        }
+        .padding()
+        .background(AppTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var categoryExpenseBarChart: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Kategoriye Göre Harcama")
+                .font(.headline)
+
+            if appState.expenseCategories.isEmpty {
+                ContentUnavailableView("Kategori gideri yok", systemImage: "chart.bar")
+            } else {
+                Chart(appState.expenseCategories) { item in
+                    BarMark(
+                        x: .value("Tutar", NSDecimalNumber(decimal: item.total).doubleValue),
+                        y: .value("Kategori", item.category)
+                    )
+                    .foregroundStyle(AppTheme.expense)
+                }
+                .frame(height: max(180, CGFloat(appState.expenseCategories.count) * 42))
+            }
+        }
+        .padding()
+        .background(AppTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
     private var recentEntries: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Son Hareketler")
@@ -129,6 +226,19 @@ struct DashboardView: View {
         .padding()
         .background(AppTheme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct InfoCard: View {
+    let title: String
+    let systemImage: String
+    let message: String
+
+    var body: some View {
+        ContentUnavailableView(title, systemImage: systemImage, description: Text(message))
+            .padding()
+            .background(AppTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

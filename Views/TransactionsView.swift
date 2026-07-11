@@ -4,6 +4,7 @@ struct TransactionsView: View {
     @EnvironmentObject private var appState: AppState
     @Binding var isAddingEntry: Bool
     @State private var selectedKind: MoneyFlowKind?
+    @State private var editingEntry: FinanceEntry?
 
     var body: some View {
         NavigationStack {
@@ -27,6 +28,20 @@ struct TransactionsView: View {
                 } else {
                     ForEach(filteredEntries) { entry in
                         EntryRow(entry: entry)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    appState.deleteEntry(entry)
+                                } label: {
+                                    Label("Kaldır", systemImage: "trash")
+                                }
+
+                                Button {
+                                    editingEntry = entry
+                                } label: {
+                                    Label("Düzenle", systemImage: "pencil")
+                                }
+                                .tint(AppTheme.warning)
+                            }
                     }
                 }
             }
@@ -40,6 +55,9 @@ struct TransactionsView: View {
                     }
                     .accessibilityLabel("Yeni kayıt")
                 }
+            }
+            .sheet(item: $editingEntry) { entry in
+                AddEntryView(entry: entry)
             }
         }
     }

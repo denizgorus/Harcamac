@@ -22,6 +22,19 @@ enum EntryCadence: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 }
 
+struct CategoryGroup: Hashable, Codable {
+    var kind: MoneyFlowKind
+    var cadence: EntryCadence
+
+    var title: String {
+        "\(cadence.rawValue) \(kind.rawValue)"
+    }
+
+    var storageKey: String {
+        "\(kind.rawValue)-\(cadence.rawValue)"
+    }
+}
+
 struct FinanceEntry: Identifiable, Hashable, Codable {
     let id: UUID
     var title: String
@@ -112,4 +125,26 @@ enum AppThemeMode: String, CaseIterable, Identifiable, Codable {
     case dark = "Koyu"
 
     var id: String { rawValue }
+}
+
+enum DashboardChartKind: String, CaseIterable, Identifiable, Codable {
+    case monthlyExpensePie = "Aylık gider pasta grafiği"
+    case monthlyIncomeExpenseBar = "Aylık gelir/gider sütun grafiği"
+    case weeklyExpenseBar = "Haftalık gider sütun grafiği"
+    case categoryExpenseBar = "Kategoriye göre gider grafiği"
+
+    var id: String { rawValue }
+}
+
+struct MonthSummary: Identifiable {
+    let id = UUID()
+    let month: String
+    let income: Decimal
+    let expense: Decimal
+}
+
+struct WeekSummary: Identifiable {
+    let id = UUID()
+    let week: String
+    let expense: Decimal
 }

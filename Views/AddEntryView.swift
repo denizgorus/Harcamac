@@ -4,6 +4,7 @@ struct AddEntryView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
 
+    private let editingEntry: FinanceEntry?
     @State private var title = ""
     @State private var category = ""
     @State private var amount = ""
@@ -12,15 +13,39 @@ struct AddEntryView: View {
     @State private var date = Date()
     @State private var note = ""
 
+    init(entry: FinanceEntry? = nil) {
+        editingEntry = entry
+        _title = State(initialValue: entry?.title ?? "")
+        _category = State(initialValue: entry?.category ?? "")
+        _amount = State(initialValue: entry.map { NSDecimalNumber(decimal: $0.amount).stringValue } ?? "")
+        _kind = State(initialValue: entry?.kind ?? .expense)
+        _cadence = State(initialValue: entry?.cadence ?? .oneTime)
+        _date = State(initialValue: entry?.date ?? Date())
+        _note = State(initialValue: entry?.note ?? "")
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Kayıt") {
                     TextField("Başlık", text: $title)
-                    TextField("Kategori", text: $category)
+                    Picker("Kategori", selection: $category) {
+                        ForEach(availableCategories, id: \.self) { category in
+                            Text(category).tag(category)
+                        }
+                    }
+                    .disabled(availableCategories.isEmpty)
                     TextField("Tutar", text: $amount)
                         .keyboardType(.decimalPad)
                     DatePicker("Tarih", selection: $date, displayedComponents: .date)
+                }
+
+                if availableCategories.isEmpty {
+                    Section {
+                        Text("Bu kayıt tipi için kategori yok. Ayarlar ekranından kategori ekleyebilirsin.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Tip") {
@@ -42,7 +67,7 @@ struct AddEntryView: View {
                         .lineLimit(3, reservesSpace: true)
                 }
             }
-            .navigationTitle("Yeni Kayıt")
+            .navigationTitle(editingEntry == nil ? "Yeni Kayıt" : "Kaydı Düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -58,13 +83,26 @@ struct AddEntryView: View {
                     .disabled(!canSave)
                 }
             }
+            .onAppear {
+                normalizeCategory()
+            }
+            .onChange(of: kind) {
+                normalizeCategory()
+            }
+            .onChange(of: cadence) {
+                normalizeCategory()
+            }
         }
     }
 
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !category.isEmpty &&
         decimalAmount != nil
+    }
+
+    private var availableCategories: [String] {
+        appState.categories(for: kind, cadence: cadence)
     }
 
     private var decimalAmount: Decimal? {
@@ -74,17 +112,33 @@ struct AddEntryView: View {
     private func save() {
         guard let decimalAmount else { return }
 
-        appState.addEntry(
-            FinanceEntry(
-                title: title,
-                category: category,
-                amount: decimalAmount,
-                kind: kind,
-                cadence: cadence,
-                date: date,
-                note: note
-            )
+        let entry = FinanceEntry(
+            id: editingEntry?.id ?? UUID(),
+            title: title,
+            category: category,
+            amount: decimalAmount,
+            kind: kind,
+            cadence: cadence,
+            date: date,
+            note: note
         )
+
+        if editingEntry == nil {
+            appState.addEntry(entry)
+        } else {
+            appState.updateEntry(entry)
+        }
         dismiss()
+    }
+
+    private func normalizeCategory() {
+        guard !availableCategories.isEmpty else {
+            category = ""
+            return
+        }
+
+        if !availableCategories.contains(category) {
+            category = availableCategories[0]
+        }
     }
 }
