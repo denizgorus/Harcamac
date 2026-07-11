@@ -18,6 +18,7 @@
 		AA0000000000000000000009 /* RecurringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000109 /* RecurringView.swift */; };
 		AA000000000000000000000A /* AssetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010A /* AssetsView.swift */; };
 		AA000000000000000000000B /* AddEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010B /* AddEntryView.swift */; };
+		AA000000000000000000000C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010C /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 		AA0000000000000000000109 /* RecurringView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringView.swift; sourceTree = "<group>"; };
 		AA000000000000000000010A /* AssetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetsView.swift; sourceTree = "<group>"; };
 		AA000000000000000000010B /* AddEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEntryView.swift; sourceTree = "<group>"; };
+		AA000000000000000000010C /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AA000000000000000000010D /* Harcamac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Harcamac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -108,6 +110,7 @@
 				AA0000000000000000000109 /* RecurringView.swift */,
 				AA000000000000000000010A /* AssetsView.swift */,
 				AA000000000000000000010B /* AddEntryView.swift */,
+				AA000000000000000000010C /* SettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -191,6 +194,7 @@
 				AA0000000000000000000009 /* RecurringView.swift in Sources */,
 				AA000000000000000000000A /* AssetsView.swift in Sources */,
 				AA000000000000000000000B /* AddEntryView.swift in Sources */,
+				AA000000000000000000000C /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,46 +1,38 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject private var appState: AppState
     @State private var isAddingEntry = false
 
     var body: some View {
         TabView {
-            DashboardView()
+            DashboardView(isAddingEntry: $isAddingEntry)
                 .tabItem {
-                    Label("Ozet", systemImage: "chart.pie.fill")
+                    Label("Özet", systemImage: "chart.pie.fill")
                 }
 
-            TransactionsView()
+            TransactionsView(isAddingEntry: $isAddingEntry)
                 .tabItem {
                     Label("Hareketler", systemImage: "list.bullet.rectangle")
                 }
 
             RecurringView()
                 .tabItem {
-                    Label("Duzenli", systemImage: "calendar.badge.clock")
+                    Label("Düzenli", systemImage: "calendar.badge.clock")
                 }
 
             AssetsView()
                 .tabItem {
-                    Label("Varliklar", systemImage: "briefcase.fill")
+                    Label("Varlıklar", systemImage: "briefcase.fill")
+                }
+
+            SettingsView()
+                .tabItem {
+                    Label("Ayarlar", systemImage: "gearshape.fill")
                 }
         }
         .tint(AppTheme.primary)
-        .safeAreaInset(edge: .bottom) {
-            Button {
-                isAddingEntry = true
-            } label: {
-                Label("Yeni Kayit", systemImage: "plus.circle.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(AppTheme.primary)
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            .background(.ultraThinMaterial)
-        }
+        .preferredColorScheme(appState.preferredColorScheme)
         .sheet(isPresented: $isAddingEntry) {
             AddEntryView()
         }

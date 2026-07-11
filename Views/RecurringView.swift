@@ -6,19 +6,31 @@ struct RecurringView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Duzenli Gelirler") {
-                    ForEach(appState.recurringEntries.filter { $0.kind == .income }) { entry in
-                        EntryRow(entry: entry)
+                Section("Düzenli Gelirler") {
+                    let recurringIncome = appState.recurringEntries.filter { $0.kind == .income }
+                    if recurringIncome.isEmpty {
+                        Text("Düzenli gelir eklenmedi.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(recurringIncome) { entry in
+                            EntryRow(entry: entry)
+                        }
                     }
                 }
 
-                Section("Duzenli Harcamalar") {
-                    ForEach(appState.recurringEntries.filter { $0.kind == .expense }) { entry in
-                        EntryRow(entry: entry)
+                Section("Düzenli Harcamalar") {
+                    let recurringExpenses = appState.recurringEntries.filter { $0.kind == .expense }
+                    if recurringExpenses.isEmpty {
+                        Text("Düzenli harcama eklenmedi.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(recurringExpenses) { entry in
+                            EntryRow(entry: entry)
+                        }
                     }
                 }
             }
-            .navigationTitle("Duzenli")
+            .navigationTitle("Düzenli")
         }
     }
 }

@@ -8,7 +8,7 @@ struct AssetsView: View {
             List {
                 Section {
                     HStack {
-                        Text("Toplam Varlik")
+                        Text("Toplam Varlık")
                             .font(.headline)
                         Spacer()
                         Text(appState.assetTotal.currencyText)
@@ -18,13 +18,21 @@ struct AssetsView: View {
                     .padding(.vertical, 6)
                 }
 
-                Section("Varliklar") {
-                    ForEach(appState.holdings) { holding in
-                        HoldingRow(holding: holding)
+                Section("Varlıklar") {
+                    if appState.holdings.isEmpty {
+                        ContentUnavailableView(
+                            "Varlık yok",
+                            systemImage: "briefcase",
+                            description: Text("Varlık ekleme ekranı sonraki adımda bağlanacak.")
+                        )
+                    } else {
+                        ForEach(appState.holdings) { holding in
+                            HoldingRow(holding: holding)
+                        }
                     }
                 }
             }
-            .navigationTitle("Varliklar")
+            .navigationTitle("Varlıklar")
         }
     }
 }
@@ -52,7 +60,7 @@ private struct HoldingRow: View {
             HStack {
                 Text("Adet: \(NSDecimalNumber(decimal: holding.units).stringValue)")
                 Spacer()
-                Text("Kar/Zarar: \(holding.gainLoss.currencyText)")
+                Text("Kâr/Zarar: \(holding.gainLoss.currencyText)")
                     .foregroundStyle(holding.gainLoss >= 0 ? AppTheme.income : AppTheme.expense)
             }
             .font(.caption)

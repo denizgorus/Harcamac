@@ -1,28 +1,28 @@
 import Foundation
+import SwiftUI
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var entries: [FinanceEntry]
-    @Published var holdings: [AssetHolding]
+    @Published var entries: [FinanceEntry] {
+        didSet { saveEntries() }
+    }
+
+    @Published var holdings: [AssetHolding] {
+        didSet { saveHoldings() }
+    }
+
+    @Published var themeMode: AppThemeMode {
+        didSet { UserDefaults.standard.set(themeMode.rawValue, forKey: StorageKey.themeMode) }
+    }
 
     private let calendar = Calendar.current
 
     init() {
-        entries = [
-            FinanceEntry(title: "Maas", category: "Gelir", amount: 65000, kind: .income, cadence: .recurring, date: .now),
-            FinanceEntry(title: "Kira", category: "Ev", amount: 22000, kind: .expense, cadence: .recurring, date: .now),
-            FinanceEntry(title: "Elektrik", category: "Fatura", amount: 980, kind: .expense, cadence: .recurring, date: .now),
-            FinanceEntry(title: "Netflix", category: "Abonelik", amount: 230, kind: .expense, cadence: .recurring, date: .now),
-            FinanceEntry(title: "Market", category: "Gida", amount: 1850, kind: .expense, cadence: .oneTime, date: .now),
-            FinanceEntry(title: "Kahve", category: "Sosyal", amount: 210, kind: .expense, cadence: .oneTime, date: .now),
-            FinanceEntry(title: "Freelance", category: "Ek Gelir", amount: 8500, kind: .income, cadence: .oneTime, date: .now)
-        ]
+        entries = Self.load([FinanceEntry].self, key: StorageKey.entries) ?? []
+        holdings = Self.load([AssetHolding].self, key: StorageKey.holdings) ?? []
 
-        holdings = [
-            AssetHolding(name: "Turk Lirasi", symbol: "TRY", kind: .bank, units: 1, averageCost: 18000, currentPrice: 18000),
-            AssetHolding(name: "Gram Altin", symbol: "XAUTRYG", kind: .gold, units: 8.5, averageCost: 2450, currentPrice: 2620),
-            AssetHolding(name: "Apple", symbol: "AAPL", kind: .stock, units: 3, averageCost: 185, currentPrice: 208)
-        ]
+        let storedTheme = UserDefaults.standard.string(forKey: StorageKey.themeMode)
+        themeMode = AppThemeMode(rawValue: storedTheme ?? "") ?? .system
     }
 
     var monthlyEntries: [FinanceEntry] {
@@ -60,9 +60,45 @@ final class AppState: ObservableObject {
         entries.insert(entry, at: 0)
     }
 
+    func addHolding(_ holding: AssetHolding) {
+        holdings.insert(holding, at: 0)
+    }
+
+    var preferredColorScheme: ColorScheme? {
+        switch themeMode {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
     private func total(for kind: MoneyFlowKind, in entries: [FinanceEntry]) -> Decimal {
         entries
             .filter { $0.kind == kind }
             .reduce(0) { $0 + $1.amount }
     }
+
+    private func saveEntries() {
+        Self.save(entries, key: StorageKey.entries)
+    }
+
+    private func saveHoldings() {
+        Self.save(holdings, key: StorageKey.holdings)
+    }
+
+    private static func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+
+    private static func save<T: Encodable>(_ value: T, key: String) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        UserDefaults.standard.set(data, forKey: key)
+    }
+}
+
+private enum StorageKey {
+    static let entries = "harcamac.entries"
+    static let holdings = "harcamac.holdings"
+    static let themeMode = "harcamac.themeMode"
 }

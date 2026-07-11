@@ -15,8 +15,8 @@ struct AddEntryView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Kayit") {
-                    TextField("Baslik", text: $title)
+                Section("Kayıt") {
+                    TextField("Başlık", text: $title)
                     TextField("Kategori", text: $category)
                     TextField("Tutar", text: $amount)
                         .keyboardType(.decimalPad)
@@ -24,7 +24,7 @@ struct AddEntryView: View {
                 }
 
                 Section("Tip") {
-                    Picker("Tur", selection: $kind) {
+                    Picker("Tür", selection: $kind) {
                         ForEach(MoneyFlowKind.allCases) { item in
                             Text(item.rawValue).tag(item)
                         }
@@ -42,7 +42,7 @@ struct AddEntryView: View {
                         .lineLimit(3, reservesSpace: true)
                 }
             }
-            .navigationTitle("Yeni Kayit")
+            .navigationTitle("Yeni Kayıt")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

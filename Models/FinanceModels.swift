@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-enum MoneyFlowKind: String, CaseIterable, Identifiable {
+enum MoneyFlowKind: String, CaseIterable, Identifiable, Codable {
     case expense = "Gider"
     case income = "Gelir"
 
@@ -15,14 +15,14 @@ enum MoneyFlowKind: String, CaseIterable, Identifiable {
     }
 }
 
-enum EntryCadence: String, CaseIterable, Identifiable {
+enum EntryCadence: String, CaseIterable, Identifiable, Codable {
     case oneTime = "Tek seferlik"
-    case recurring = "Duzenli"
+    case recurring = "Düzenli"
 
     var id: String { rawValue }
 }
 
-struct FinanceEntry: Identifiable, Hashable {
+struct FinanceEntry: Identifiable, Hashable, Codable {
     let id: UUID
     var title: String
     var category: String
@@ -53,18 +53,18 @@ struct FinanceEntry: Identifiable, Hashable {
     }
 }
 
-enum AssetKind: String, CaseIterable, Identifiable {
+enum AssetKind: String, CaseIterable, Identifiable, Codable {
     case cash = "Nakit"
     case bank = "Banka"
     case stock = "Hisse"
-    case gold = "Altin"
+    case gold = "Altın"
     case crypto = "Kripto"
-    case other = "Diger"
+    case other = "Diğer"
 
     var id: String { rawValue }
 }
 
-struct AssetHolding: Identifiable, Hashable {
+struct AssetHolding: Identifiable, Hashable, Codable {
     let id: UUID
     var name: String
     var symbol: String
@@ -104,4 +104,12 @@ struct CategorySummary: Identifiable {
     let id = UUID()
     let category: String
     let total: Decimal
+}
+
+enum AppThemeMode: String, CaseIterable, Identifiable, Codable {
+    case system = "Sistem"
+    case light = "Açık"
+    case dark = "Koyu"
+
+    var id: String { rawValue }
 }
