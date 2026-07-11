@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @EnvironmentObject private var appState: AppState
@@ -36,11 +37,7 @@ struct ContentView: View {
         .overlay {
             if let catPopup = appState.catPopup {
                 VStack(spacing: 10) {
-                    Image(catPopup.imageName)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 92, height: 92)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    CatPopupImage(name: catPopup.imageName)
 
                     Text(catPopup.title)
                         .font(.headline.weight(.bold))
@@ -68,5 +65,42 @@ struct ContentView: View {
         .sheet(isPresented: $isAddingEntry) {
             AddEntryView()
         }
+    }
+}
+
+private struct CatPopupImage: View {
+    let name: String
+
+    var body: some View {
+        Group {
+            if let image = uiImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "photo")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 92, height: 92)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var uiImage: UIImage? {
+        if let image = UIImage(named: name) {
+            return image
+        }
+
+        if let url = Bundle.main.url(forResource: name, withExtension: "png"),
+           let image = UIImage(contentsOfFile: url.path) {
+            return image
+        }
+
+        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Resources") {
+            return UIImage(contentsOfFile: url.path)
+        }
+
+        return nil
     }
 }

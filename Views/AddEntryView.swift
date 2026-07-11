@@ -10,9 +10,9 @@ struct AddEntryView: View {
     @State private var amount = ""
     @State private var kind: MoneyFlowKind = .expense
     @State private var cadence: EntryCadence = .oneTime
+    @State private var paymentType: PaymentType = .cash
     @State private var date = Date()
     @State private var note = ""
-    @State private var hasInstallments = false
     @State private var installmentCount = 2
     @State private var notificationEnabled = false
 
@@ -23,9 +23,9 @@ struct AddEntryView: View {
         _amount = State(initialValue: entry.map { NSDecimalNumber(decimal: $0.amount).stringValue } ?? "")
         _kind = State(initialValue: entry?.kind ?? .expense)
         _cadence = State(initialValue: entry?.cadence ?? .oneTime)
+        _paymentType = State(initialValue: (entry?.installmentCount ?? 0) > 1 ? .installment : .cash)
         _date = State(initialValue: entry?.date ?? Date())
         _note = State(initialValue: entry?.note ?? "")
-        _hasInstallments = State(initialValue: (entry?.installmentCount ?? 0) > 1)
         _installmentCount = State(initialValue: max(entry?.installmentCount ?? 2, 2))
         _notificationEnabled = State(initialValue: entry?.notificationEnabled ?? false)
     }
@@ -48,14 +48,14 @@ struct AddEntryView: View {
 
                 if availableCategories.isEmpty {
                     Section {
-                        Text("Bu kayıt tipi için kategori yok. Ayarlar ekranından kategori ekleyebilirsin.")
+                        Text("Bu kayıt tipi için kategori yok. Hareketler ekranındaki kategori düğmesinden ekleyebilirsin.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("Tip") {
-                    Picker("Tür", selection: $kind) {
+                Section("İşlem") {
+                    Picker("Gelir/Gider", selection: $kind) {
                         ForEach(MoneyFlowKind.allCases) { item in
                             Text(item.rawValue).tag(item)
                         }
@@ -68,10 +68,15 @@ struct AddEntryView: View {
                     }
                 }
 
-                Section("Taksit") {
-                    Toggle("Taksitli kayıt", isOn: $hasInstallments)
+                Section("Tür") {
+                    Picker("Tür", selection: $paymentType) {
+                        ForEach(PaymentType.allCases) { item in
+                            Text(item.rawValue).tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
 
-                    if hasInstallments {
+                    if paymentType == .installment {
                         Stepper("Taksit sayısı: \(installmentCount)", value: $installmentCount, in: 2...36)
                         LabeledContent("Toplam tutar", value: installmentTotalText)
                     }
@@ -91,7 +96,7 @@ struct AddEntryView: View {
                         .lineLimit(3, reservesSpace: true)
                 }
             }
-            .navigationTitle(editingEntry == nil ? "Yeni Kayıt" : "Kaydı Düzenle")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -138,6 +143,11 @@ struct AddEntryView: View {
         return (decimalAmount * Decimal(installmentCount)).currencyText
     }
 
+    private var navigationTitle: String {
+        if editingEntry != nil { return "Kaydı Düzenle" }
+        return kind == .expense ? "Harcama Kayıt" : "Gelir Kayıt"
+    }
+
     private func save() {
         guard let decimalAmount else { return }
 
@@ -150,8 +160,8 @@ struct AddEntryView: View {
             cadence: cadence,
             date: date,
             note: note,
-            installmentCount: hasInstallments ? installmentCount : nil,
-            totalAmount: hasInstallments ? decimalAmount * Decimal(installmentCount) : nil,
+            installmentCount: paymentType == .installment ? installmentCount : nil,
+            totalAmount: paymentType == .installment ? decimalAmount * Decimal(installmentCount) : nil,
             notificationEnabled: cadence == .recurring && notificationEnabled
         )
 

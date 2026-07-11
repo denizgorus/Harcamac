@@ -106,6 +106,7 @@ struct CategoryListView: View {
                                 } label: {
                                     Label("Kaldır", systemImage: "trash")
                                 }
+                                .tint(AppTheme.expense)
                             }
                     }
                 }

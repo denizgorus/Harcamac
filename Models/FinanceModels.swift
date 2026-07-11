@@ -22,6 +22,13 @@ enum EntryCadence: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 }
 
+enum PaymentType: String, CaseIterable, Identifiable, Codable {
+    case cash = "Peşin"
+    case installment = "Taksit"
+
+    var id: String { rawValue }
+}
+
 struct CategoryGroup: Hashable, Codable {
     var kind: MoneyFlowKind
     var cadence: EntryCadence
@@ -202,8 +209,27 @@ enum DashboardChartKind: String, CaseIterable, Identifiable, Codable {
     case monthlyIncomeExpenseBar = "Aylık gelir/gider sütun grafiği"
     case weeklyExpenseBar = "Haftalık gider sütun grafiği"
     case categoryExpenseBar = "Kategoriye göre gider grafiği"
+    case categoryIncomePie = "Kategoriye göre gelir pasta grafiği"
+    case categoryIncomeBar = "Kategoriye göre gelir sütun grafiği"
+    case weeklyIncomeBar = "Haftalık gelir sütun grafiği"
+    case monthlyExpenseBar = "Aylık gider sütun grafiği"
+    case monthlyIncomeBar = "Aylık gelir sütun grafiği"
 
     var id: String { rawValue }
+
+    var shortTitle: String {
+        switch self {
+        case .monthlyExpensePie: "Aylık Gider Pasta"
+        case .monthlyIncomeExpenseBar: "Aylık Gelir/Gider"
+        case .weeklyExpenseBar: "Haftalık Gider"
+        case .categoryExpenseBar: "Kategori Gider"
+        case .categoryIncomePie: "Kategori Gelir Pasta"
+        case .categoryIncomeBar: "Kategori Gelir"
+        case .weeklyIncomeBar: "Haftalık Gelir"
+        case .monthlyExpenseBar: "Aylık Gider"
+        case .monthlyIncomeBar: "Aylık Gelir"
+        }
+    }
 }
 
 struct MonthSummary: Identifiable {
@@ -216,5 +242,6 @@ struct MonthSummary: Identifiable {
 struct WeekSummary: Identifiable {
     let id = UUID()
     let week: String
+    let income: Decimal
     let expense: Decimal
 }

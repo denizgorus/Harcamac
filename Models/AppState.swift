@@ -38,7 +38,7 @@ final class AppState: ObservableObject {
 
         let storedTheme = UserDefaults.standard.string(forKey: StorageKey.themeMode)
         themeMode = AppThemeMode(rawValue: storedTheme ?? "") ?? .system
-        categoriesByGroup = Self.load([String: [CategoryItem]].self, key: StorageKey.categories) ?? Self.defaultCategories
+        categoriesByGroup = Self.cleanedCategories(Self.load([String: [CategoryItem]].self, key: StorageKey.categories) ?? Self.defaultCategories)
         enabledCharts = Self.load([DashboardChartKind].self, key: StorageKey.enabledCharts) ?? DashboardChartKind.allCases
         isCatPopupEnabled = UserDefaults.standard.object(forKey: StorageKey.catPopupEnabled) as? Bool ?? true
         catPopup = nil
@@ -65,10 +65,11 @@ final class AppState: ObservableObject {
     }
 
     var expenseCategories: [CategorySummary] {
-        let grouped = Dictionary(grouping: monthlyEntries.filter { $0.kind == .expense }, by: \.category)
-        return grouped
-            .map { CategorySummary(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }, colorHex: colorHex(for: $0.key, kind: .expense, cadence: nil)) }
-            .sorted { $0.total > $1.total }
+        categorySummaries(for: .expense, in: monthlyEntries)
+    }
+
+    var incomeCategories: [CategorySummary] {
+        categorySummaries(for: .income, in: monthlyEntries)
     }
 
     var monthlyTrend: [MonthSummary] {
@@ -95,9 +96,13 @@ final class AppState: ObservableObject {
         return (0..<4).reversed().compactMap { offset in
             guard let weekDate = calendar.date(byAdding: .weekOfYear, value: -offset, to: .now) else { return nil }
             let entriesInWeek = entries.filter {
-                $0.kind == .expense && calendar.isDate($0.date, equalTo: weekDate, toGranularity: .weekOfYear)
+                calendar.isDate($0.date, equalTo: weekDate, toGranularity: .weekOfYear)
             }
-            return WeekSummary(week: formatter.string(from: weekDate), expense: entriesInWeek.reduce(0) { $0 + $1.amount })
+            return WeekSummary(
+                week: formatter.string(from: weekDate),
+                income: total(for: .income, in: entriesInWeek),
+                expense: total(for: .expense, in: entriesInWeek)
+            )
         }
     }
 
@@ -185,6 +190,15 @@ final class AppState: ObservableObject {
         }
     }
 
+    func replaceChart(_ oldChart: DashboardChartKind, with newChart: DashboardChartKind) {
+        guard let index = enabledCharts.firstIndex(of: oldChart) else { return }
+        if enabledCharts.contains(newChart), oldChart != newChart {
+            enabledCharts.remove(at: index)
+        } else {
+            enabledCharts[index] = newChart
+        }
+    }
+
     private func total(for kind: MoneyFlowKind, in entries: [FinanceEntry]) -> Decimal {
         entries
             .filter { $0.kind == kind }
@@ -195,6 +209,13 @@ final class AppState: ObservableObject {
         let grouped = Dictionary(grouping: entries.filter { $0.kind == kind && $0.cadence == cadence }, by: \.category)
         return grouped
             .map { CategorySummary(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }, colorHex: colorHex(for: $0.key, kind: kind, cadence: cadence)) }
+            .sorted { $0.total > $1.total }
+    }
+
+    private func categorySummaries(for kind: MoneyFlowKind, in entries: [FinanceEntry]) -> [CategorySummary] {
+        let grouped = Dictionary(grouping: entries.filter { $0.kind == kind }, by: \.category)
+        return grouped
+            .map { CategorySummary(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }, colorHex: colorHex(for: $0.key, kind: kind, cadence: nil)) }
             .sorted { $0.total > $1.total }
     }
 
@@ -265,6 +286,23 @@ private enum StorageKey {
 }
 
 private extension AppState {
+    static func cleanedCategories(_ stored: [String: [CategoryItem]]) -> [String: [CategoryItem]] {
+        var result = stored
+        let oneTimeIncomeKey = CategoryGroup(kind: .income, cadence: .oneTime).storageKey
+        let recurringIncomeKey = CategoryGroup(kind: .income, cadence: .recurring).storageKey
+        let oldOneTimeIncome = Set(["Ek Gelir", "Satış", "Prim", "Hediye"])
+
+        if Set(result[oneTimeIncomeKey]?.map(\.name) ?? []) == oldOneTimeIncome {
+            result[oneTimeIncomeKey] = defaultCategories[oneTimeIncomeKey]
+        }
+
+        if result[recurringIncomeKey]?.isEmpty ?? true {
+            result[recurringIncomeKey] = defaultCategories[recurringIncomeKey]
+        }
+
+        return result
+    }
+
     static var defaultCategories: [String: [CategoryItem]] {
         var result: [String: [CategoryItem]] = [:]
         result[CategoryGroup(kind: .expense, cadence: .oneTime).storageKey] = [
@@ -283,10 +321,11 @@ private extension AppState {
             CategoryItem(name: "Sigorta", colorHex: "#FF006E")
         ]
         result[CategoryGroup(kind: .income, cadence: .oneTime).storageKey] = [
-            CategoryItem(name: "Ek Gelir", colorHex: "#2A9D8F"),
-            CategoryItem(name: "Satış", colorHex: "#52B788"),
-            CategoryItem(name: "Prim", colorHex: "#80B918"),
-            CategoryItem(name: "Hediye", colorHex: "#00B4D8")
+            CategoryItem(name: "Maaş", colorHex: "#007F5F"),
+            CategoryItem(name: "Avans", colorHex: "#2A9D8F"),
+            CategoryItem(name: "Serbest İş", colorHex: "#52B788"),
+            CategoryItem(name: "Kira Geliri", colorHex: "#00B4D8"),
+            CategoryItem(name: "Yatırım Geliri", colorHex: "#55A630")
         ]
         result[CategoryGroup(kind: .income, cadence: .recurring).storageKey] = [
             CategoryItem(name: "Maaş", colorHex: "#007F5F"),

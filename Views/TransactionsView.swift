@@ -4,6 +4,8 @@ struct TransactionsView: View {
     @EnvironmentObject private var appState: AppState
     @Binding var isAddingEntry: Bool
     @State private var selectedKind: MoneyFlowKind?
+    @State private var selectedCategory: String?
+    @State private var sortOption: TransactionSortOption = .newest
     @State private var editingEntry: FinanceEntry?
     @State private var isManagingCategories = false
 
@@ -11,13 +13,26 @@ struct TransactionsView: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("Filtre", selection: $selectedKind) {
+                    Picker("Tür", selection: $selectedKind) {
                         Text("Tümü").tag(nil as MoneyFlowKind?)
                         ForEach(MoneyFlowKind.allCases) { kind in
                             Text(kind.rawValue).tag(kind as MoneyFlowKind?)
                         }
                     }
                     .pickerStyle(.segmented)
+
+                    Picker("Kategori", selection: $selectedCategory) {
+                        Text("Tüm kategoriler").tag(nil as String?)
+                        ForEach(availableCategories, id: \.self) { category in
+                            Text(category).tag(category as String?)
+                        }
+                    }
+
+                    Picker("Sıralama", selection: $sortOption) {
+                        ForEach(TransactionSortOption.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
                 }
 
                 if filteredEntries.isEmpty {
@@ -47,6 +62,9 @@ struct TransactionsView: View {
                 }
             }
             .navigationTitle("Hareketler")
+            .onChange(of: selectedKind) {
+                selectedCategory = nil
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
@@ -76,9 +94,39 @@ struct TransactionsView: View {
     }
 
     private var filteredEntries: [FinanceEntry] {
-        guard let selectedKind else { return appState.entries }
-        return appState.entries.filter { $0.kind == selectedKind }
+        let filtered = appState.entries.filter { entry in
+            let kindMatches = selectedKind.map { entry.kind == $0 } ?? true
+            let categoryMatches = selectedCategory.map { entry.category == $0 } ?? true
+            return kindMatches && categoryMatches
+        }
+
+        switch sortOption {
+        case .newest:
+            return filtered.sorted { $0.date > $1.date }
+        case .oldest:
+            return filtered.sorted { $0.date < $1.date }
+        case .highestAmount:
+            return filtered.sorted { $0.amount > $1.amount }
+        case .lowestAmount:
+            return filtered.sorted { $0.amount < $1.amount }
+        }
     }
+
+    private var availableCategories: [String] {
+        let categories = appState.entries
+            .filter { entry in selectedKind.map { entry.kind == $0 } ?? true }
+            .map(\.category)
+        return Array(Set(categories)).sorted { $0.localizedCompare($1) == .orderedAscending }
+    }
+}
+
+private enum TransactionSortOption: String, CaseIterable, Identifiable {
+    case newest = "Yeni tarih"
+    case oldest = "Eski tarih"
+    case highestAmount = "Yüksek tutar"
+    case lowestAmount = "Düşük tutar"
+
+    var id: String { rawValue }
 }
 
 struct EntryRow: View {
