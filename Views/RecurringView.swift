@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct RecurringView: View {
@@ -7,6 +8,20 @@ struct RecurringView: View {
     var body: some View {
         NavigationStack {
             List {
+                if !appState.recurringExpenseCategories.isEmpty {
+                    Section("Düzenli Harcama Grafiği") {
+                        RecurringCategoryChart(items: appState.recurringExpenseCategories)
+                            .frame(height: 220)
+                    }
+                }
+
+                if !appState.recurringIncomeCategories.isEmpty {
+                    Section("Düzenli Gelir Grafiği") {
+                        RecurringCategoryChart(items: appState.recurringIncomeCategories)
+                            .frame(height: 220)
+                    }
+                }
+
                 Section("Düzenli Gelirler") {
                     let recurringIncome = appState.recurringEntries.filter { $0.kind == .income }
                     if recurringIncome.isEmpty {
@@ -37,6 +52,21 @@ struct RecurringView: View {
             .sheet(item: $editingEntry) { entry in
                 AddEntryView(entry: entry)
             }
+        }
+    }
+}
+
+private struct RecurringCategoryChart: View {
+    let items: [CategorySummary]
+
+    var body: some View {
+        Chart(items) { item in
+            SectorMark(
+                angle: .value("Tutar", NSDecimalNumber(decimal: item.total).doubleValue),
+                innerRadius: .ratio(0.58),
+                angularInset: 1.5
+            )
+            .foregroundStyle(Color(hex: item.colorHex))
         }
     }
 }

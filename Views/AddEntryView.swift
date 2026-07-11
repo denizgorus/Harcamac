@@ -12,6 +12,9 @@ struct AddEntryView: View {
     @State private var cadence: EntryCadence = .oneTime
     @State private var date = Date()
     @State private var note = ""
+    @State private var hasInstallments = false
+    @State private var installmentCount = 2
+    @State private var notificationEnabled = false
 
     init(entry: FinanceEntry? = nil) {
         editingEntry = entry
@@ -22,6 +25,9 @@ struct AddEntryView: View {
         _cadence = State(initialValue: entry?.cadence ?? .oneTime)
         _date = State(initialValue: entry?.date ?? Date())
         _note = State(initialValue: entry?.note ?? "")
+        _hasInstallments = State(initialValue: (entry?.installmentCount ?? 0) > 1)
+        _installmentCount = State(initialValue: max(entry?.installmentCount ?? 2, 2))
+        _notificationEnabled = State(initialValue: entry?.notificationEnabled ?? false)
     }
 
     var body: some View {
@@ -59,6 +65,24 @@ struct AddEntryView: View {
                         ForEach(EntryCadence.allCases) { item in
                             Text(item.rawValue).tag(item)
                         }
+                    }
+                }
+
+                Section("Taksit") {
+                    Toggle("Taksitli kayıt", isOn: $hasInstallments)
+
+                    if hasInstallments {
+                        Stepper("Taksit sayısı: \(installmentCount)", value: $installmentCount, in: 2...36)
+                        LabeledContent("Toplam tutar", value: installmentTotalText)
+                    }
+                }
+
+                if cadence == .recurring {
+                    Section("Bildirim") {
+                        Toggle("Yaklaşınca bildir", isOn: $notificationEnabled)
+                        Text("Her ay seçtiğin güne göre yerel bildirim hazırlanır.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -102,11 +126,16 @@ struct AddEntryView: View {
     }
 
     private var availableCategories: [String] {
-        appState.categories(for: kind, cadence: cadence)
+        appState.categoryNames(for: kind, cadence: cadence)
     }
 
     private var decimalAmount: Decimal? {
         Decimal(string: amount.replacingOccurrences(of: ",", with: "."))
+    }
+
+    private var installmentTotalText: String {
+        guard let decimalAmount else { return "Tutar gir" }
+        return (decimalAmount * Decimal(installmentCount)).currencyText
     }
 
     private func save() {
@@ -120,7 +149,10 @@ struct AddEntryView: View {
             kind: kind,
             cadence: cadence,
             date: date,
-            note: note
+            note: note,
+            installmentCount: hasInstallments ? installmentCount : nil,
+            totalAmount: hasInstallments ? decimalAmount * Decimal(installmentCount) : nil,
+            notificationEnabled: cadence == .recurring && notificationEnabled
         )
 
         if editingEntry == nil {

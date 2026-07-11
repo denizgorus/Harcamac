@@ -5,6 +5,7 @@ struct TransactionsView: View {
     @Binding var isAddingEntry: Bool
     @State private var selectedKind: MoneyFlowKind?
     @State private var editingEntry: FinanceEntry?
+    @State private var isManagingCategories = false
 
     var body: some View {
         NavigationStack {
@@ -47,7 +48,14 @@ struct TransactionsView: View {
             }
             .navigationTitle("Hareketler")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        isManagingCategories = true
+                    } label: {
+                        Image(systemName: "tag.fill")
+                    }
+                    .accessibilityLabel("Kategoriler")
+
                     Button {
                         isAddingEntry = true
                     } label: {
@@ -58,6 +66,11 @@ struct TransactionsView: View {
             }
             .sheet(item: $editingEntry) { entry in
                 AddEntryView(entry: entry)
+            }
+            .sheet(isPresented: $isManagingCategories) {
+                NavigationStack {
+                    CategoryManagerView()
+                }
             }
         }
     }
@@ -83,6 +96,11 @@ struct EntryRow: View {
                 Text("\(entry.category) - \(entry.cadence.rawValue)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let installmentDescription = entry.installmentDescription {
+                    Text(installmentDescription)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UserNotifications
 
 @MainActor
 final class AppState: ObservableObject {
@@ -15,7 +16,7 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(themeMode.rawValue, forKey: StorageKey.themeMode) }
     }
 
-    @Published var categoriesByGroup: [String: [String]] {
+    @Published var categoriesByGroup: [String: [CategoryItem]] {
         didSet { Self.save(categoriesByGroup, key: StorageKey.categories) }
     }
 
@@ -27,7 +28,7 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(isCatPopupEnabled, forKey: StorageKey.catPopupEnabled) }
     }
 
-    @Published var catPopup: String?
+    @Published var catPopup: CatPopupKind?
 
     private let calendar = Calendar.current
 
@@ -37,7 +38,7 @@ final class AppState: ObservableObject {
 
         let storedTheme = UserDefaults.standard.string(forKey: StorageKey.themeMode)
         themeMode = AppThemeMode(rawValue: storedTheme ?? "") ?? .system
-        categoriesByGroup = Self.load([String: [String]].self, key: StorageKey.categories) ?? Self.defaultCategories
+        categoriesByGroup = Self.load([String: [CategoryItem]].self, key: StorageKey.categories) ?? Self.defaultCategories
         enabledCharts = Self.load([DashboardChartKind].self, key: StorageKey.enabledCharts) ?? DashboardChartKind.allCases
         isCatPopupEnabled = UserDefaults.standard.object(forKey: StorageKey.catPopupEnabled) as? Bool ?? true
         catPopup = nil
@@ -66,7 +67,7 @@ final class AppState: ObservableObject {
     var expenseCategories: [CategorySummary] {
         let grouped = Dictionary(grouping: monthlyEntries.filter { $0.kind == .expense }, by: \.category)
         return grouped
-            .map { CategorySummary(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }) }
+            .map { CategorySummary(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }, colorHex: colorHex(for: $0.key, kind: .expense, cadence: nil)) }
             .sorted { $0.total > $1.total }
     }
 
@@ -104,18 +105,30 @@ final class AppState: ObservableObject {
         entries.filter { $0.cadence == .recurring }
     }
 
+    var recurringIncomeCategories: [CategorySummary] {
+        categorySummaries(for: .income, cadence: .recurring)
+    }
+
+    var recurringExpenseCategories: [CategorySummary] {
+        categorySummaries(for: .expense, cadence: .recurring)
+    }
+
     func addEntry(_ entry: FinanceEntry) {
         entries.insert(entry, at: 0)
+        scheduleNotificationIfNeeded(for: entry)
         showCatPopup(for: entry.kind)
     }
 
     func updateEntry(_ entry: FinanceEntry) {
         guard let index = entries.firstIndex(where: { $0.id == entry.id }) else { return }
         entries[index] = entry
+        removeNotification(for: entry)
+        scheduleNotificationIfNeeded(for: entry)
     }
 
     func deleteEntry(_ entry: FinanceEntry) {
         entries.removeAll { $0.id == entry.id }
+        removeNotification(for: entry)
     }
 
     func addHolding(_ holding: AssetHolding) {
@@ -130,24 +143,38 @@ final class AppState: ObservableObject {
         }
     }
 
-    func categories(for kind: MoneyFlowKind, cadence: EntryCadence) -> [String] {
+    func categories(for kind: MoneyFlowKind, cadence: EntryCadence) -> [CategoryItem] {
         categoriesByGroup[CategoryGroup(kind: kind, cadence: cadence).storageKey] ?? []
     }
 
-    func addCategory(_ category: String, kind: MoneyFlowKind, cadence: EntryCadence) {
+    func categoryNames(for kind: MoneyFlowKind, cadence: EntryCadence) -> [String] {
+        categories(for: kind, cadence: cadence).map(\.name)
+    }
+
+    func addCategory(_ category: String, colorHex: String, kind: MoneyFlowKind, cadence: EntryCadence) {
         let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         let key = CategoryGroup(kind: kind, cadence: cadence).storageKey
         var categories = categoriesByGroup[key] ?? []
-        guard !categories.contains(where: { $0.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
-        categories.append(trimmed)
-        categoriesByGroup[key] = categories.sorted { $0.localizedCompare($1) == .orderedAscending }
+        guard !categories.contains(where: { $0.name.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+        categories.append(CategoryItem(name: trimmed, colorHex: colorHex))
+        categoriesByGroup[key] = categories.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
     }
 
     func deleteCategory(_ category: String, kind: MoneyFlowKind, cadence: EntryCadence) {
         let key = CategoryGroup(kind: kind, cadence: cadence).storageKey
-        categoriesByGroup[key]?.removeAll { $0 == category }
+        categoriesByGroup[key]?.removeAll { $0.name == category }
+    }
+
+    func colorHex(for category: String, kind: MoneyFlowKind, cadence: EntryCadence?) -> String {
+        let cadences = cadence.map { [$0] } ?? EntryCadence.allCases
+        for cadence in cadences {
+            if let color = categories(for: kind, cadence: cadence).first(where: { $0.name == category })?.colorHex {
+                return color
+            }
+        }
+        return kind == .income ? "#198754" : "#C0392B"
     }
 
     func toggleChart(_ chart: DashboardChartKind) {
@@ -164,6 +191,13 @@ final class AppState: ObservableObject {
             .reduce(0) { $0 + $1.amount }
     }
 
+    private func categorySummaries(for kind: MoneyFlowKind, cadence: EntryCadence) -> [CategorySummary] {
+        let grouped = Dictionary(grouping: entries.filter { $0.kind == kind && $0.cadence == cadence }, by: \.category)
+        return grouped
+            .map { CategorySummary(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }, colorHex: colorHex(for: $0.key, kind: kind, cadence: cadence)) }
+            .sorted { $0.total > $1.total }
+    }
+
     private func saveEntries() {
         Self.save(entries, key: StorageKey.entries)
     }
@@ -174,7 +208,40 @@ final class AppState: ObservableObject {
 
     private func showCatPopup(for kind: MoneyFlowKind) {
         guard isCatPopupEnabled else { return }
-        catPopup = kind == .income ? "😺 Gelir eklendi" : "😿 Harcama eklendi"
+        catPopup = kind == .income ? .income : .expense
+    }
+
+    private func scheduleNotificationIfNeeded(for entry: FinanceEntry) {
+        guard entry.cadence == .recurring, entry.notificationEnabled else { return }
+
+        let identifier = notificationID(for: entry)
+
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            guard granted else { return }
+
+            let content = UNMutableNotificationContent()
+            content.title = entry.kind == .expense ? "\(entry.title) gideriniz yaklaştı" : "\(entry.title) geliriniz yaklaştı"
+            content.body = "\(entry.amount.currencyText) tutarındaki düzenli \(entry.kind.rawValue.lowercased()) kaydınızı kontrol edin."
+            content.sound = .default
+
+            let day = Calendar.current.component(.day, from: entry.date)
+            var dateComponents = DateComponents()
+            dateComponents.day = day
+            dateComponents.hour = 9
+            dateComponents.minute = 0
+
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    private func removeNotification(for entry: FinanceEntry) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationID(for: entry)])
+    }
+
+    private func notificationID(for entry: FinanceEntry) -> String {
+        "harcamac.recurring.\(entry.id.uuidString)"
     }
 
     private static func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
@@ -198,12 +265,35 @@ private enum StorageKey {
 }
 
 private extension AppState {
-    static var defaultCategories: [String: [String]] {
-        var result: [String: [String]] = [:]
-        result[CategoryGroup(kind: .expense, cadence: .oneTime).storageKey] = ["Market", "Ulaşım", "Yeme İçme", "Sağlık", "Sosyal", "Alışveriş"]
-        result[CategoryGroup(kind: .expense, cadence: .recurring).storageKey] = ["Kira", "Fatura", "Abonelik", "Aidat", "Sigorta"]
-        result[CategoryGroup(kind: .income, cadence: .oneTime).storageKey] = ["Ek Gelir", "Satış", "Prim", "Hediye"]
-        result[CategoryGroup(kind: .income, cadence: .recurring).storageKey] = ["Maaş", "Kira Geliri", "Temettü", "Faiz"]
+    static var defaultCategories: [String: [CategoryItem]] {
+        var result: [String: [CategoryItem]] = [:]
+        result[CategoryGroup(kind: .expense, cadence: .oneTime).storageKey] = [
+            CategoryItem(name: "Market", colorHex: "#F94144"),
+            CategoryItem(name: "Ulaşım", colorHex: "#F3722C"),
+            CategoryItem(name: "Yeme İçme", colorHex: "#F8961E"),
+            CategoryItem(name: "Sağlık", colorHex: "#B5179E"),
+            CategoryItem(name: "Sosyal", colorHex: "#7209B7"),
+            CategoryItem(name: "Alışveriş", colorHex: "#4361EE")
+        ]
+        result[CategoryGroup(kind: .expense, cadence: .recurring).storageKey] = [
+            CategoryItem(name: "Kira", colorHex: "#C1121F"),
+            CategoryItem(name: "Fatura", colorHex: "#E85D04"),
+            CategoryItem(name: "Abonelik", colorHex: "#9D4EDD"),
+            CategoryItem(name: "Aidat", colorHex: "#3A86FF"),
+            CategoryItem(name: "Sigorta", colorHex: "#FF006E")
+        ]
+        result[CategoryGroup(kind: .income, cadence: .oneTime).storageKey] = [
+            CategoryItem(name: "Ek Gelir", colorHex: "#2A9D8F"),
+            CategoryItem(name: "Satış", colorHex: "#52B788"),
+            CategoryItem(name: "Prim", colorHex: "#80B918"),
+            CategoryItem(name: "Hediye", colorHex: "#00B4D8")
+        ]
+        result[CategoryGroup(kind: .income, cadence: .recurring).storageKey] = [
+            CategoryItem(name: "Maaş", colorHex: "#007F5F"),
+            CategoryItem(name: "Kira Geliri", colorHex: "#2B9348"),
+            CategoryItem(name: "Temettü", colorHex: "#55A630"),
+            CategoryItem(name: "Faiz", colorHex: "#0A9396")
+        ]
         return result
     }
 }

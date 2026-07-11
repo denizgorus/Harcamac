@@ -35,6 +35,12 @@ struct CategoryGroup: Hashable, Codable {
     }
 }
 
+struct CategoryItem: Identifiable, Hashable, Codable {
+    var id: String { name }
+    var name: String
+    var colorHex: String
+}
+
 struct FinanceEntry: Identifiable, Hashable, Codable {
     let id: UUID
     var title: String
@@ -44,6 +50,23 @@ struct FinanceEntry: Identifiable, Hashable, Codable {
     var cadence: EntryCadence
     var date: Date
     var note: String
+    var installmentCount: Int?
+    var totalAmount: Decimal?
+    var notificationEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case category
+        case amount
+        case kind
+        case cadence
+        case date
+        case note
+        case installmentCount
+        case totalAmount
+        case notificationEnabled
+    }
 
     init(
         id: UUID = UUID(),
@@ -53,7 +76,10 @@ struct FinanceEntry: Identifiable, Hashable, Codable {
         kind: MoneyFlowKind,
         cadence: EntryCadence,
         date: Date = .now,
-        note: String = ""
+        note: String = "",
+        installmentCount: Int? = nil,
+        totalAmount: Decimal? = nil,
+        notificationEnabled: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -63,6 +89,30 @@ struct FinanceEntry: Identifiable, Hashable, Codable {
         self.cadence = cadence
         self.date = date
         self.note = note
+        self.installmentCount = installmentCount
+        self.totalAmount = totalAmount
+        self.notificationEnabled = notificationEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        category = try container.decode(String.self, forKey: .category)
+        amount = try container.decode(Decimal.self, forKey: .amount)
+        kind = try container.decode(MoneyFlowKind.self, forKey: .kind)
+        cadence = try container.decode(EntryCadence.self, forKey: .cadence)
+        date = try container.decode(Date.self, forKey: .date)
+        note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
+        installmentCount = try container.decodeIfPresent(Int.self, forKey: .installmentCount)
+        totalAmount = try container.decodeIfPresent(Decimal.self, forKey: .totalAmount)
+        notificationEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationEnabled) ?? false
+    }
+
+    var installmentDescription: String? {
+        guard let installmentCount, installmentCount > 1 else { return nil }
+        let total = totalAmount ?? amount * Decimal(installmentCount)
+        return "\(installmentCount) taksit - toplam \(total.currencyText)"
     }
 }
 
@@ -117,6 +167,26 @@ struct CategorySummary: Identifiable {
     let id = UUID()
     let category: String
     let total: Decimal
+    let colorHex: String
+}
+
+enum CatPopupKind: Equatable {
+    case income
+    case expense
+
+    var title: String {
+        switch self {
+        case .income: "Gelir eklendi"
+        case .expense: "Gider eklendi"
+        }
+    }
+
+    var imageName: String {
+        switch self {
+        case .income: "happy-cat"
+        case .expense: "sad-cat"
+        }
+    }
 }
 
 enum AppThemeMode: String, CaseIterable, Identifiable, Codable {

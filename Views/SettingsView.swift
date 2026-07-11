@@ -22,30 +22,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Özet Grafikleri") {
-                    ForEach(DashboardChartKind.allCases) { chart in
-                        Toggle(chart.rawValue, isOn: chartBinding(chart))
-                    }
-                }
-
-                Section("Kategoriler") {
-                    NavigationLink("Tek seferlik gider kategorileri") {
-                        CategoryListView(kind: .expense, cadence: .oneTime)
-                    }
-
-                    NavigationLink("Düzenli gider kategorileri") {
-                        CategoryListView(kind: .expense, cadence: .recurring)
-                    }
-
-                    NavigationLink("Tek seferlik gelir kategorileri") {
-                        CategoryListView(kind: .income, cadence: .oneTime)
-                    }
-
-                    NavigationLink("Düzenli gelir kategorileri") {
-                        CategoryListView(kind: .income, cadence: .recurring)
-                    }
-                }
-
                 Section("Veri") {
                     LabeledContent("Hareket sayısı", value: "\(appState.entries.count)")
                     LabeledContent("Varlık sayısı", value: "\(appState.holdings.count)")
@@ -61,40 +37,54 @@ struct SettingsView: View {
             .navigationTitle("Ayarlar")
         }
     }
+}
 
-    private func chartBinding(_ chart: DashboardChartKind) -> Binding<Bool> {
-        Binding {
-            appState.enabledCharts.contains(chart)
-        } set: { isEnabled in
-            let contains = appState.enabledCharts.contains(chart)
-            guard contains != isEnabled else { return }
-            appState.toggleChart(chart)
+struct CategoryManagerView: View {
+    var body: some View {
+        List {
+            NavigationLink("Tek seferlik gider kategorileri") {
+                CategoryListView(kind: .expense, cadence: .oneTime)
+            }
+
+            NavigationLink("Düzenli gider kategorileri") {
+                CategoryListView(kind: .expense, cadence: .recurring)
+            }
+
+            NavigationLink("Tek seferlik gelir kategorileri") {
+                CategoryListView(kind: .income, cadence: .oneTime)
+            }
+
+            NavigationLink("Düzenli gelir kategorileri") {
+                CategoryListView(kind: .income, cadence: .recurring)
+            }
         }
+        .navigationTitle("Kategoriler")
     }
 }
 
-private struct CategoryListView: View {
+struct CategoryListView: View {
     @EnvironmentObject private var appState: AppState
     let kind: MoneyFlowKind
     let cadence: EntryCadence
 
     @State private var newCategory = ""
+    @State private var selectedColor = AppTheme.primary
 
     var body: some View {
         List {
             Section("Yeni Kategori") {
-                HStack {
-                    TextField("Kategori adı", text: $newCategory)
-                        .textInputAutocapitalization(.words)
+                TextField("Kategori adı", text: $newCategory)
+                    .textInputAutocapitalization(.words)
 
-                    Button {
-                        appState.addCategory(newCategory, kind: kind, cadence: cadence)
-                        newCategory = ""
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                    }
-                    .disabled(newCategory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                ColorPicker("Renk", selection: $selectedColor, supportsOpacity: false)
+
+                Button {
+                    appState.addCategory(newCategory, colorHex: selectedColor.hexString, kind: kind, cadence: cadence)
+                    newCategory = ""
+                } label: {
+                    Label("Kategori Ekle", systemImage: "plus.circle.fill")
                 }
+                .disabled(newCategory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
             Section("Kategoriler") {
@@ -103,11 +93,16 @@ private struct CategoryListView: View {
                     Text("Kategori yok.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(categories, id: \.self) { category in
-                        Text(category)
+                    ForEach(categories) { category in
+                        HStack {
+                            Circle()
+                                .fill(Color(hex: category.colorHex))
+                                .frame(width: 14, height: 14)
+                            Text(category.name)
+                        }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
-                                    appState.deleteCategory(category, kind: kind, cadence: cadence)
+                                    appState.deleteCategory(category.name, kind: kind, cadence: cadence)
                                 } label: {
                                     Label("Kaldır", systemImage: "trash")
                                 }

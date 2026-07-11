@@ -19,6 +19,8 @@
 		AA000000000000000000000A /* AssetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010A /* AssetsView.swift */; };
 		AA000000000000000000000B /* AddEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010B /* AddEntryView.swift */; };
 		AA000000000000000000000C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010C /* SettingsView.swift */; };
+		AA000000000000000000000D /* sad-cat.png in Resources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010E /* sad-cat.png */; };
+		AA000000000000000000000E /* happy-cat.png in Resources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000010F /* happy-cat.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +37,8 @@
 		AA000000000000000000010B /* AddEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEntryView.swift; sourceTree = "<group>"; };
 		AA000000000000000000010C /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AA000000000000000000010D /* Harcamac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Harcamac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA000000000000000000010E /* sad-cat.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "sad-cat.png"; sourceTree = "<group>"; };
+		AA000000000000000000010F /* happy-cat.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "happy-cat.png"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,6 +69,7 @@
 				AA0000000000000000000305 /* Services */,
 				AA0000000000000000000306 /* Theme */,
 				AA0000000000000000000307 /* Views */,
+				AA0000000000000000000308 /* Resources */,
 			);
 			path = .;
 			sourceTree = "<group>";
@@ -113,6 +118,15 @@
 				AA000000000000000000010C /* SettingsView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000308 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000010E /* sad-cat.png */,
+				AA000000000000000000010F /* happy-cat.png */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -173,6 +187,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000000000000000000000D /* sad-cat.png in Resources */,
+				AA000000000000000000000E /* happy-cat.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

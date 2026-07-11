@@ -21,12 +21,25 @@ struct DashboardView: View {
             .navigationTitle("Harcamac")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isAddingEntry = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
+                    HStack {
+                        Menu {
+                            ForEach(DashboardChartKind.allCases.filter { !appState.enabledCharts.contains($0) }) { chart in
+                                Button(chart.rawValue) {
+                                    appState.toggleChart(chart)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chart.bar.doc.horizontal")
+                        }
+                        .accessibilityLabel("Grafik ekle")
+
+                        Button {
+                            isAddingEntry = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                        }
+                        .accessibilityLabel("Yeni kayıt")
                     }
-                    .accessibilityLabel("Yeni kayıt")
                 }
             }
         }
@@ -72,20 +85,28 @@ struct DashboardView: View {
     @ViewBuilder
     private var chartSections: some View {
         if appState.enabledCharts.isEmpty {
-            InfoCard(title: "Grafik yok", systemImage: "chart.bar", message: "Ayarlar ekranından özet grafiklerini açabilirsin.")
+            InfoCard(title: "Grafik yok", systemImage: "chart.bar", message: "Sağ üstteki grafik düğmesinden özet grafiklerini açabilirsin.")
         } else {
             ForEach(appState.enabledCharts) { chart in
                 switch chart {
                 case .monthlyExpensePie:
-                    expensePieChart
+                    removableChart(chart) { expensePieChart }
                 case .monthlyIncomeExpenseBar:
-                    monthlyIncomeExpenseChart
+                    removableChart(chart) { monthlyIncomeExpenseChart }
                 case .weeklyExpenseBar:
-                    weeklyExpenseChart
+                    removableChart(chart) { weeklyExpenseChart }
                 case .categoryExpenseBar:
-                    categoryExpenseBarChart
+                    removableChart(chart) { categoryExpenseBarChart }
                 }
             }
+        }
+    }
+
+    private func removableChart<Content: View>(_ chart: DashboardChartKind, @ViewBuilder content: () -> Content) -> some View {
+        SwipeRemovableChart {
+            appState.toggleChart(chart)
+        } content: {
+            content()
         }
     }
 
@@ -107,7 +128,7 @@ struct DashboardView: View {
                         innerRadius: .ratio(0.58),
                         angularInset: 1.5
                     )
-                    .foregroundStyle(by: .value("Kategori", item.category))
+                    .foregroundStyle(Color(hex: item.colorHex))
                 }
                 .frame(height: 220)
 
@@ -193,12 +214,12 @@ struct DashboardView: View {
             } else {
                 Chart(appState.expenseCategories) { item in
                     BarMark(
-                        x: .value("Tutar", NSDecimalNumber(decimal: item.total).doubleValue),
-                        y: .value("Kategori", item.category)
+                        x: .value("Kategori", item.category),
+                        y: .value("Tutar", NSDecimalNumber(decimal: item.total).doubleValue)
                     )
-                    .foregroundStyle(AppTheme.expense)
+                    .foregroundStyle(Color(hex: item.colorHex))
                 }
-                .frame(height: max(180, CGFloat(appState.expenseCategories.count) * 42))
+                .frame(height: 220)
             }
         }
         .padding()
@@ -261,5 +282,50 @@ private struct MetricCard: View {
         .padding()
         .background(tint.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct SwipeRemovableChart<Content: View>: View {
+    let onRemove: () -> Void
+    let content: Content
+    @State private var offset: CGFloat = 0
+
+    init(onRemove: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+        self.onRemove = onRemove
+        self.content = content()
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(role: .destructive) {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    onRemove()
+                }
+            } label: {
+                Label("Kaldır", systemImage: "trash")
+                    .labelStyle(.iconOnly)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 76)
+                    .frame(maxHeight: .infinity)
+                    .background(AppTheme.expense)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            content
+                .offset(x: offset)
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            offset = max(-84, min(0, value.translation.width))
+                        }
+                        .onEnded { value in
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                offset = value.translation.width < -44 ? -84 : 0
+                            }
+                        }
+                )
+        }
+        .clipped()
     }
 }

@@ -33,18 +33,26 @@ struct ContentView: View {
         }
         .tint(AppTheme.primary)
         .preferredColorScheme(appState.preferredColorScheme)
-        .overlay(alignment: .topTrailing) {
+        .overlay {
             if let catPopup = appState.catPopup {
-                Text(catPopup)
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial)
-                    .clipShape(Capsule())
-                    .shadow(radius: 12)
-                    .padding(.top, 58)
-                    .padding(.trailing, 16)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                VStack(spacing: 10) {
+                    Image(catPopup.imageName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 92, height: 92)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    Text(catPopup.title)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(catPopup == .income ? AppTheme.income : AppTheme.expense)
+                }
+                .padding(16)
+                .background(.regularMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .shadow(radius: 18)
+                .transition(.scale(scale: 0.92).combined(with: .opacity))
+                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
