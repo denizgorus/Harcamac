@@ -19,3 +19,6 @@ Carthage/Build/
 # Secrets and local config
 *.env
 *.xcconfig.local
+
+# Local tools
+.tools/
