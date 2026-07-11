@@ -26,3 +26,7 @@ Uygulama; aylik sabit harcamalari, tek seferlik harcamalari, duzenli ve duzensiz
 ## Gelistirme Notlari
 
 Proje ilk asamada sade bir MVP olarak gelistirilecek. Once temel kayit, listeleme ve ozet ekranlari kurulacak; ardindan grafikler, tekrar eden islem hatirlaticilari ve canli fiyat entegrasyonlari eklenecek.
+
+## Xcode
+
+Projeyi acmak icin `Harcamac.xcodeproj` dosyasini Xcode ile ac. Ilk iskelet `Harcamac` scheme'i ile iOS hedefi olarak derlenir.
