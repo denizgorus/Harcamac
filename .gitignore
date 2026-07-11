@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# CocoaPods / Carthage
+Pods/
+Carthage/Build/
+
+# Secrets and local config
+*.env
+*.xcconfig.local
