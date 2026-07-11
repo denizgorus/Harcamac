@@ -29,6 +29,15 @@ enum PaymentType: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 }
 
+enum ChartTimeRange: String, CaseIterable, Identifiable, Codable {
+    case currentMonth = "Bu ay"
+    case currentWeek = "Bu hafta"
+    case lastSixMonths = "Son 6 ay"
+    case allTime = "Tüm zamanlar"
+
+    var id: String { rawValue }
+}
+
 struct CategoryGroup: Hashable, Codable {
     var kind: MoneyFlowKind
     var cadence: EntryCadence
@@ -230,6 +239,28 @@ enum DashboardChartKind: String, CaseIterable, Identifiable, Codable {
         case .monthlyIncomeBar: "Aylık Gelir"
         }
     }
+
+    var supportedKinds: [MoneyFlowKind] {
+        switch self {
+        case .monthlyIncomeExpenseBar:
+            MoneyFlowKind.allCases
+        case .monthlyExpensePie, .weeklyExpenseBar, .categoryExpenseBar, .monthlyExpenseBar:
+            [.expense]
+        case .categoryIncomePie, .categoryIncomeBar, .weeklyIncomeBar, .monthlyIncomeBar:
+            [.income]
+        }
+    }
+
+    var supportsCategorySelection: Bool {
+        true
+    }
+}
+
+struct DashboardChartConfig: Hashable, Codable {
+    var timeRange: ChartTimeRange
+    var selectedCategories: [String]
+
+    static let `default` = DashboardChartConfig(timeRange: .currentMonth, selectedCategories: [])
 }
 
 struct MonthSummary: Identifiable {

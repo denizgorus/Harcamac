@@ -24,6 +24,10 @@ final class AppState: ObservableObject {
         didSet { Self.save(enabledCharts, key: StorageKey.enabledCharts) }
     }
 
+    @Published var chartConfigs: [DashboardChartKind: DashboardChartConfig] {
+        didSet { Self.save(chartConfigs, key: StorageKey.chartConfigs) }
+    }
+
     @Published var isCatPopupEnabled: Bool {
         didSet { UserDefaults.standard.set(isCatPopupEnabled, forKey: StorageKey.catPopupEnabled) }
     }
@@ -40,6 +44,7 @@ final class AppState: ObservableObject {
         themeMode = AppThemeMode(rawValue: storedTheme ?? "") ?? .system
         categoriesByGroup = Self.cleanedCategories(Self.load([String: [CategoryItem]].self, key: StorageKey.categories) ?? Self.defaultCategories)
         enabledCharts = Self.load([DashboardChartKind].self, key: StorageKey.enabledCharts) ?? DashboardChartKind.allCases
+        chartConfigs = Self.load([DashboardChartKind: DashboardChartConfig].self, key: StorageKey.chartConfigs) ?? [:]
         isCatPopupEnabled = UserDefaults.standard.object(forKey: StorageKey.catPopupEnabled) as? Bool ?? true
         catPopup = nil
     }
@@ -192,11 +197,36 @@ final class AppState: ObservableObject {
 
     func replaceChart(_ oldChart: DashboardChartKind, with newChart: DashboardChartKind) {
         guard let index = enabledCharts.firstIndex(of: oldChart) else { return }
+        let oldConfig = chartConfigs[oldChart] ?? .default
         if enabledCharts.contains(newChart), oldChart != newChart {
             enabledCharts.remove(at: index)
         } else {
             enabledCharts[index] = newChart
         }
+        chartConfigs[newChart] = oldConfig
+        if oldChart != newChart {
+            chartConfigs[oldChart] = nil
+        }
+    }
+
+    func config(for chart: DashboardChartKind) -> DashboardChartConfig {
+        chartConfigs[chart] ?? .default
+    }
+
+    func updateChart(_ chart: DashboardChartKind, config: DashboardChartConfig) {
+        chartConfigs[chart] = config
+    }
+
+    func availableChartCategories(for chart: DashboardChartKind) -> [String] {
+        let categoryNames = entries
+            .filter { chart.supportedKinds.contains($0.kind) }
+            .map(\.category)
+        let configuredNames = chart.supportedKinds.flatMap { kind in
+            EntryCadence.allCases.flatMap { cadence in
+                categories(for: kind, cadence: cadence).map(\.name)
+            }
+        }
+        return Array(Set(categoryNames + configuredNames)).sorted { $0.localizedCompare($1) == .orderedAscending }
     }
 
     private func total(for kind: MoneyFlowKind, in entries: [FinanceEntry]) -> Decimal {
@@ -282,6 +312,7 @@ private enum StorageKey {
     static let themeMode = "harcamac.themeMode"
     static let categories = "harcamac.categories"
     static let enabledCharts = "harcamac.enabledCharts"
+    static let chartConfigs = "harcamac.chartConfigs"
     static let catPopupEnabled = "harcamac.catPopupEnabled"
 }
 

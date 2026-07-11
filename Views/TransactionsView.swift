@@ -35,29 +35,33 @@ struct TransactionsView: View {
                     }
                 }
 
-                if filteredEntries.isEmpty {
+                if groupedEntries.isEmpty {
                     ContentUnavailableView(
                         "Hareket yok",
                         systemImage: "list.bullet.rectangle",
                         description: Text("Yeni gelir veya gider eklediğinde burada görünecek.")
                     )
                 } else {
-                    ForEach(filteredEntries) { entry in
-                        EntryRow(entry: entry)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    appState.deleteEntry(entry)
-                                } label: {
-                                    Label("Kaldır", systemImage: "trash")
-                                }
+                    ForEach(groupedEntries) { group in
+                        Section(group.title) {
+                            ForEach(group.entries) { entry in
+                                EntryRow(entry: entry)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button(role: .destructive) {
+                                            appState.deleteEntry(entry)
+                                        } label: {
+                                            Label("Kaldır", systemImage: "trash")
+                                        }
 
-                                Button {
-                                    editingEntry = entry
-                                } label: {
-                                    Label("Düzenle", systemImage: "pencil")
-                                }
-                                .tint(AppTheme.warning)
+                                        Button {
+                                            editingEntry = entry
+                                        } label: {
+                                            Label("Düzenle", systemImage: "pencil")
+                                        }
+                                        .tint(AppTheme.warning)
+                                    }
                             }
+                        }
                     }
                 }
             }
@@ -112,11 +116,46 @@ struct TransactionsView: View {
         }
     }
 
+    private var groupedEntries: [TransactionMonthGroup] {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "tr_TR")
+        formatter.dateFormat = "LLLL yyyy"
+
+        let grouped = Dictionary(grouping: filteredEntries) { entry in
+            calendar.startOfMonth(for: entry.date)
+        }
+
+        return grouped
+            .map { key, entries in
+                TransactionMonthGroup(
+                    monthDate: key,
+                    title: formatter.string(from: key).capitalized(with: Locale(identifier: "tr_TR")),
+                    entries: entries
+                )
+            }
+            .sorted { sortOption == .oldest ? $0.monthDate < $1.monthDate : $0.monthDate > $1.monthDate }
+    }
+
     private var availableCategories: [String] {
         let categories = appState.entries
             .filter { entry in selectedKind.map { entry.kind == $0 } ?? true }
             .map(\.category)
         return Array(Set(categories)).sorted { $0.localizedCompare($1) == .orderedAscending }
+    }
+}
+
+private struct TransactionMonthGroup: Identifiable {
+    var id: Date { monthDate }
+    let monthDate: Date
+    let title: String
+    let entries: [FinanceEntry]
+}
+
+private extension Calendar {
+    func startOfMonth(for date: Date) -> Date {
+        let components = dateComponents([.year, .month], from: date)
+        return self.date(from: components) ?? date
     }
 }
 

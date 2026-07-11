@@ -89,23 +89,23 @@ struct DashboardView: View {
             ForEach(appState.enabledCharts) { chart in
                 switch chart {
                 case .monthlyExpensePie:
-                    removableChart(chart) { expensePieChart }
+                    removableChart(chart) { expensePieChart(chart) }
                 case .monthlyIncomeExpenseBar:
-                    removableChart(chart) { monthlyIncomeExpenseChart }
+                    removableChart(chart) { monthlyIncomeExpenseChart(chart) }
                 case .weeklyExpenseBar:
-                    removableChart(chart) { weeklyExpenseChart }
+                    removableChart(chart) { weeklyExpenseChart(chart) }
                 case .categoryExpenseBar:
-                    removableChart(chart) { categoryExpenseBarChart }
+                    removableChart(chart) { categoryExpenseBarChart(chart) }
                 case .categoryIncomePie:
-                    removableChart(chart) { incomePieChart }
+                    removableChart(chart) { incomePieChart(chart) }
                 case .categoryIncomeBar:
-                    removableChart(chart) { categoryIncomeBarChart }
+                    removableChart(chart) { categoryIncomeBarChart(chart) }
                 case .weeklyIncomeBar:
-                    removableChart(chart) { weeklyIncomeChart }
+                    removableChart(chart) { weeklyIncomeChart(chart) }
                 case .monthlyExpenseBar:
-                    removableChart(chart) { monthlyExpenseChart }
+                    removableChart(chart) { monthlyExpenseChart(chart) }
                 case .monthlyIncomeBar:
-                    removableChart(chart) { monthlyIncomeChart }
+                    removableChart(chart) { monthlyIncomeChart(chart) }
                 }
             }
         }
@@ -121,55 +121,20 @@ struct DashboardView: View {
         }
     }
 
-    private var expensePieChart: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Kategori Dağılımı")
-                .font(.headline)
-
-            if appState.expenseCategories.isEmpty {
-                ContentUnavailableView(
-                    "Henüz gider yok",
-                    systemImage: "chart.pie",
-                    description: Text("Kategorilere göre grafik görmek için gider ekle.")
-                )
-            } else {
-                Chart(appState.expenseCategories) { item in
-                    SectorMark(
-                        angle: .value("Tutar", NSDecimalNumber(decimal: item.total).doubleValue),
-                        innerRadius: .ratio(0.58),
-                        angularInset: 1.5
-                    )
-                    .foregroundStyle(Color(hex: item.colorHex))
-                }
-                .frame(height: 220)
-
-                VStack(spacing: 8) {
-                    ForEach(appState.expenseCategories.prefix(5)) { item in
-                        HStack {
-                            Text(item.category)
-                            Spacer()
-                            Text(item.total.currencyText)
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.subheadline)
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(AppTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    private func expensePieChart(_ chart: DashboardChartKind) -> some View {
+        categoryPieChart(title: "Kategori Dağılımı", items: categorySummaries(for: .expense, chart: chart), emptyText: "Henüz gider yok")
     }
 
-    private var monthlyIncomeExpenseChart: some View {
+    private func monthlyIncomeExpenseChart(_ chart: DashboardChartKind) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Aylara Göre Gelir ve Gider")
                 .font(.headline)
 
-            if appState.monthlyTrend.allSatisfy({ $0.income == 0 && $0.expense == 0 }) {
+            let trend = monthlySummaries(for: chart)
+            if trend.allSatisfy({ $0.income == 0 && $0.expense == 0 }) {
                 ContentUnavailableView("Grafik için kayıt yok", systemImage: "chart.bar")
             } else {
-                Chart(appState.monthlyTrend) { item in
+                Chart(trend) { item in
                     BarMark(
                         x: .value("Ay", item.month),
                         y: .value("Gelir", NSDecimalNumber(decimal: item.income).doubleValue)
@@ -192,24 +157,25 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private var monthlyExpenseChart: some View {
-        singleMonthlyChart(title: "Aylık Gider", kind: .expense)
+    private func monthlyExpenseChart(_ chart: DashboardChartKind) -> some View {
+        singleMonthlyChart(title: "Aylık Gider", kind: .expense, chart: chart)
     }
 
-    private var monthlyIncomeChart: some View {
-        singleMonthlyChart(title: "Aylık Gelir", kind: .income)
+    private func monthlyIncomeChart(_ chart: DashboardChartKind) -> some View {
+        singleMonthlyChart(title: "Aylık Gelir", kind: .income, chart: chart)
     }
 
-    private func singleMonthlyChart(title: String, kind: MoneyFlowKind) -> some View {
+    private func singleMonthlyChart(title: String, kind: MoneyFlowKind, chart: DashboardChartKind) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.headline)
 
-            let hasData = appState.monthlyTrend.contains { kind == .income ? $0.income > 0 : $0.expense > 0 }
+            let trend = monthlySummaries(for: chart)
+            let hasData = trend.contains { kind == .income ? $0.income > 0 : $0.expense > 0 }
             if !hasData {
                 ContentUnavailableView("Grafik için kayıt yok", systemImage: "chart.bar")
             } else {
-                Chart(appState.monthlyTrend) { item in
+                Chart(trend) { item in
                     BarMark(
                         x: .value("Ay", item.month),
                         y: .value(kind.rawValue, NSDecimalNumber(decimal: kind == .income ? item.income : item.expense).doubleValue)
@@ -224,15 +190,16 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private var weeklyExpenseChart: some View {
+    private func weeklyExpenseChart(_ chart: DashboardChartKind) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Haftalık Harcama")
                 .font(.headline)
 
-            if appState.weeklyExpenseTrend.allSatisfy({ $0.expense == 0 }) {
+            let trend = weeklySummaries(for: chart)
+            if trend.allSatisfy({ $0.expense == 0 }) {
                 ContentUnavailableView("Haftalık gider yok", systemImage: "chart.bar.xaxis")
             } else {
-                Chart(appState.weeklyExpenseTrend) { item in
+                Chart(trend) { item in
                     BarMark(
                         x: .value("Hafta", item.week),
                         y: .value("Gider", NSDecimalNumber(decimal: item.expense).doubleValue)
@@ -247,15 +214,16 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private var weeklyIncomeChart: some View {
+    private func weeklyIncomeChart(_ chart: DashboardChartKind) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Haftalık Gelir")
                 .font(.headline)
 
-            if appState.weeklyExpenseTrend.allSatisfy({ $0.income == 0 }) {
+            let trend = weeklySummaries(for: chart)
+            if trend.allSatisfy({ $0.income == 0 }) {
                 ContentUnavailableView("Haftalık gelir yok", systemImage: "chart.bar.xaxis")
             } else {
-                Chart(appState.weeklyExpenseTrend) { item in
+                Chart(trend) { item in
                     BarMark(
                         x: .value("Hafta", item.week),
                         y: .value("Gelir", NSDecimalNumber(decimal: item.income).doubleValue)
@@ -270,35 +238,16 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private var categoryExpenseBarChart: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Kategoriye Göre Harcama")
-                .font(.headline)
-
-            if appState.expenseCategories.isEmpty {
-                ContentUnavailableView("Kategori gideri yok", systemImage: "chart.bar")
-            } else {
-                Chart(appState.expenseCategories) { item in
-                    BarMark(
-                        x: .value("Kategori", item.category),
-                        y: .value("Tutar", NSDecimalNumber(decimal: item.total).doubleValue)
-                    )
-                    .foregroundStyle(Color(hex: item.colorHex))
-                }
-                .frame(height: 220)
-            }
-        }
-        .padding()
-        .background(AppTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    private func categoryExpenseBarChart(_ chart: DashboardChartKind) -> some View {
+        categoryBarChart(title: "Kategoriye Göre Harcama", items: categorySummaries(for: .expense, chart: chart), emptyText: "Kategori gideri yok")
     }
 
-    private var incomePieChart: some View {
-        categoryPieChart(title: "Gelir Kategori Dağılımı", items: appState.incomeCategories, emptyText: "Henüz gelir yok")
+    private func incomePieChart(_ chart: DashboardChartKind) -> some View {
+        categoryPieChart(title: "Gelir Kategori Dağılımı", items: categorySummaries(for: .income, chart: chart), emptyText: "Henüz gelir yok")
     }
 
-    private var categoryIncomeBarChart: some View {
-        categoryBarChart(title: "Kategoriye Göre Gelir", items: appState.incomeCategories, emptyText: "Kategori geliri yok")
+    private func categoryIncomeBarChart(_ chart: DashboardChartKind) -> some View {
+        categoryBarChart(title: "Kategoriye Göre Gelir", items: categorySummaries(for: .income, chart: chart), emptyText: "Kategori geliri yok")
     }
 
     private func categoryPieChart(title: String, items: [CategorySummary], emptyText: String) -> some View {
@@ -346,6 +295,85 @@ struct DashboardView: View {
         .padding()
         .background(AppTheme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func chartEntries(for chart: DashboardChartKind) -> [FinanceEntry] {
+        let config = appState.config(for: chart)
+        let calendar = Calendar.current
+        let now = Date()
+
+        return appState.entries.filter { entry in
+            guard chart.supportedKinds.contains(entry.kind) else { return false }
+
+            if !config.selectedCategories.isEmpty && !config.selectedCategories.contains(entry.category) {
+                return false
+            }
+
+            switch config.timeRange {
+            case .currentMonth:
+                return calendar.isDate(entry.date, equalTo: now, toGranularity: .month)
+            case .currentWeek:
+                return calendar.isDate(entry.date, equalTo: now, toGranularity: .weekOfYear)
+            case .lastSixMonths:
+                guard let startDate = calendar.date(byAdding: .month, value: -5, to: calendar.startOfMonth(for: now)) else { return true }
+                return entry.date >= startDate
+            case .allTime:
+                return true
+            }
+        }
+    }
+
+    private func categorySummaries(for kind: MoneyFlowKind, chart: DashboardChartKind) -> [CategorySummary] {
+        let entries = chartEntries(for: chart).filter { $0.kind == kind }
+        let grouped = Dictionary(grouping: entries, by: \.category)
+        return grouped
+            .map { CategorySummary(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }, colorHex: appState.colorHex(for: $0.key, kind: kind, cadence: nil)) }
+            .sorted { $0.total > $1.total }
+    }
+
+    private func monthlySummaries(for chart: DashboardChartKind) -> [MonthSummary] {
+        let entries = chartEntries(for: chart)
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "tr_TR")
+        formatter.dateFormat = "MMM"
+
+        let months = monthDates(for: appState.config(for: chart).timeRange)
+        return months.map { monthDate in
+            let entriesInMonth = entries.filter { calendar.isDate($0.date, equalTo: monthDate, toGranularity: .month) }
+            return MonthSummary(
+                month: formatter.string(from: monthDate),
+                income: entriesInMonth.filter { $0.kind == .income }.reduce(0) { $0 + $1.amount },
+                expense: entriesInMonth.filter { $0.kind == .expense }.reduce(0) { $0 + $1.amount }
+            )
+        }
+    }
+
+    private func weeklySummaries(for chart: DashboardChartKind) -> [WeekSummary] {
+        let entries = chartEntries(for: chart)
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "tr_TR")
+        formatter.dateFormat = "d MMM"
+
+        return (0..<4).reversed().compactMap { offset in
+            guard let weekDate = calendar.date(byAdding: .weekOfYear, value: -offset, to: .now) else { return nil }
+            let entriesInWeek = entries.filter { calendar.isDate($0.date, equalTo: weekDate, toGranularity: .weekOfYear) }
+            return WeekSummary(
+                week: formatter.string(from: weekDate),
+                income: entriesInWeek.filter { $0.kind == .income }.reduce(0) { $0 + $1.amount },
+                expense: entriesInWeek.filter { $0.kind == .expense }.reduce(0) { $0 + $1.amount }
+            )
+        }
+    }
+
+    private func monthDates(for range: ChartTimeRange) -> [Date] {
+        let calendar = Calendar.current
+        let now = Date()
+        let monthCount = range == .currentMonth ? 1 : 6
+        return (0..<monthCount).reversed().compactMap { offset in
+            calendar.date(byAdding: .month, value: -offset, to: now)
+        }
     }
 
     private var recentEntries: some View {
@@ -548,14 +576,20 @@ private struct ChartEditorView: View {
     @EnvironmentObject private var appState: AppState
     let mode: ChartEditorMode
     @State private var selectedChart: DashboardChartKind
+    @State private var selectedTimeRange: ChartTimeRange
+    @State private var selectedCategories: Set<String>
 
     init(mode: ChartEditorMode) {
         self.mode = mode
         switch mode {
         case .add:
             _selectedChart = State(initialValue: .monthlyIncomeExpenseBar)
+            _selectedTimeRange = State(initialValue: .currentMonth)
+            _selectedCategories = State(initialValue: [])
         case .edit(let chart):
             _selectedChart = State(initialValue: chart)
+            _selectedTimeRange = State(initialValue: .currentMonth)
+            _selectedCategories = State(initialValue: [])
         }
     }
 
@@ -568,9 +602,50 @@ private struct ChartEditorView: View {
                     }
                 }
             }
+
+            Section("Zaman Dilimi") {
+                Picker("Zaman", selection: $selectedTimeRange) {
+                    ForEach(ChartTimeRange.allCases) { range in
+                        Text(range.rawValue).tag(range)
+                    }
+                }
+            }
+
+            Section("Kategoriler") {
+                if availableCategories.isEmpty {
+                    Text("Kategori yok.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        selectedCategories.removeAll()
+                    } label: {
+                        Label("Tüm kategoriler", systemImage: selectedCategories.isEmpty ? "checkmark.circle.fill" : "circle")
+                    }
+
+                    ForEach(availableCategories, id: \.self) { category in
+                        Button {
+                            toggleCategory(category)
+                        } label: {
+                            HStack {
+                                Text(category)
+                                Spacer()
+                                Image(systemName: selectedCategories.contains(category) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selectedCategories.contains(category) ? AppTheme.primary : .secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            loadExistingConfig()
+        }
+        .onChange(of: selectedChart) {
+            selectedCategories = selectedCategories.intersection(Set(availableCategories))
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Vazgec") {
@@ -593,15 +668,48 @@ private struct ChartEditorView: View {
         }
     }
 
+    private var availableCategories: [String] {
+        appState.availableChartCategories(for: selectedChart)
+    }
+
+    private func loadExistingConfig() {
+        guard case .edit(let chart) = mode else { return }
+        let config = appState.config(for: chart)
+        selectedTimeRange = config.timeRange
+        selectedCategories = Set(config.selectedCategories)
+    }
+
+    private func toggleCategory(_ category: String) {
+        if selectedCategories.contains(category) {
+            selectedCategories.remove(category)
+        } else {
+            selectedCategories.insert(category)
+        }
+    }
+
     private func save() {
+        let config = DashboardChartConfig(
+            timeRange: selectedTimeRange,
+            selectedCategories: Array(selectedCategories).sorted { $0.localizedCompare($1) == .orderedAscending }
+        )
+
         switch mode {
         case .add:
             if !appState.enabledCharts.contains(selectedChart) {
                 appState.toggleChart(selectedChart)
             }
+            appState.updateChart(selectedChart, config: config)
         case .edit(let oldChart):
             appState.replaceChart(oldChart, with: selectedChart)
+            appState.updateChart(selectedChart, config: config)
         }
         dismiss()
+    }
+}
+
+private extension Calendar {
+    func startOfMonth(for date: Date) -> Date {
+        let components = dateComponents([.year, .month], from: date)
+        return self.date(from: components) ?? date
     }
 }

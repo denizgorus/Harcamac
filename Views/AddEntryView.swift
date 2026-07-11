@@ -41,7 +41,7 @@ struct AddEntryView: View {
                         }
                     }
                     .disabled(availableCategories.isEmpty)
-                    TextField("Tutar", text: $amount)
+                    TextField(amountTitle, text: $amount)
                         .keyboardType(.decimalPad)
                     DatePicker("Tarih", selection: $date, displayedComponents: .date)
                 }
@@ -68,17 +68,18 @@ struct AddEntryView: View {
                     }
                 }
 
-                Section("Tür") {
-                    Picker("Tür", selection: $paymentType) {
-                        ForEach(PaymentType.allCases) { item in
-                            Text(item.rawValue).tag(item)
+                if showsPaymentType {
+                    Section("Tür") {
+                        Picker("Tür", selection: $paymentType) {
+                            ForEach(PaymentType.allCases) { item in
+                                Text(item.rawValue).tag(item)
+                            }
                         }
-                    }
-                    .pickerStyle(.segmented)
+                        .pickerStyle(.segmented)
 
-                    if paymentType == .installment {
-                        Stepper("Taksit sayısı: \(installmentCount)", value: $installmentCount, in: 2...36)
-                        LabeledContent("Toplam tutar", value: installmentTotalText)
+                        if paymentType == .installment {
+                            Stepper("Taksit sayısı: \(installmentCount)", value: $installmentCount, in: 2...36)
+                        }
                     }
                 }
 
@@ -113,12 +114,22 @@ struct AddEntryView: View {
                 }
             }
             .onAppear {
+                sanitizeInputs()
+                normalizePaymentType()
                 normalizeCategory()
             }
+            .onChange(of: title) {
+                title = sanitizedTitle(title)
+            }
+            .onChange(of: amount) {
+                amount = sanitizedAmount(amount)
+            }
             .onChange(of: kind) {
+                normalizePaymentType()
                 normalizeCategory()
             }
             .onChange(of: cadence) {
+                normalizePaymentType()
                 normalizeCategory()
             }
         }
@@ -138,9 +149,12 @@ struct AddEntryView: View {
         Decimal(string: amount.replacingOccurrences(of: ",", with: "."))
     }
 
-    private var installmentTotalText: String {
-        guard let decimalAmount else { return "Tutar gir" }
-        return (decimalAmount * Decimal(installmentCount)).currencyText
+    private var showsPaymentType: Bool {
+        kind == .expense && cadence == .recurring
+    }
+
+    private var amountTitle: String {
+        showsPaymentType && paymentType == .installment ? "Taksit tutarı" : "Tutar"
     }
 
     private var navigationTitle: String {
@@ -160,8 +174,8 @@ struct AddEntryView: View {
             cadence: cadence,
             date: date,
             note: note,
-            installmentCount: paymentType == .installment ? installmentCount : nil,
-            totalAmount: paymentType == .installment ? decimalAmount * Decimal(installmentCount) : nil,
+            installmentCount: showsPaymentType && paymentType == .installment ? installmentCount : nil,
+            totalAmount: showsPaymentType && paymentType == .installment ? decimalAmount * Decimal(installmentCount) : nil,
             notificationEnabled: cadence == .recurring && notificationEnabled
         )
 
@@ -182,5 +196,39 @@ struct AddEntryView: View {
         if !availableCategories.contains(category) {
             category = availableCategories[0]
         }
+    }
+
+    private func normalizePaymentType() {
+        if !showsPaymentType {
+            paymentType = .cash
+        }
+    }
+
+    private func sanitizeInputs() {
+        title = sanitizedTitle(title)
+        amount = sanitizedAmount(amount)
+    }
+
+    private func sanitizedTitle(_ value: String) -> String {
+        value.filter { character in
+            !character.isNumber
+        }
+    }
+
+    private func sanitizedAmount(_ value: String) -> String {
+        var result = ""
+        var hasSeparator = false
+
+        for character in value {
+            if character.isNumber {
+                result.append(character)
+            } else if character == "," || character == "." {
+                guard !hasSeparator else { continue }
+                hasSeparator = true
+                result.append(",")
+            }
+        }
+
+        return result
     }
 }
