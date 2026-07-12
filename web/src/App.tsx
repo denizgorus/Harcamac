@@ -39,7 +39,7 @@ function Auth() {
   const [captchaToken, setCaptchaToken] = useState('')
   const [busy, setBusy] = useState(false)
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
-  const redirectTo = `${window.location.origin}/`
+  const redirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
 
   async function socialLogin(provider: 'google' | 'apple') {
     setBusy(true); setMessage('')
