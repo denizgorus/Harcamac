@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDownUp, BarChart3, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, HelpCircle, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Pencil, PieChart as PieIcon, Plus, Search, Settings, Sun, Tags, Trash2, WalletCards, X } from 'lucide-react'
+import { ArrowDownUp, BarChart3, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, HelpCircle, LayoutDashboard, LogOut, Menu, Moon, Pencil, PieChart as PieIcon, Plus, Search, Settings, Sun, Tags, Trash2, WalletCards, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { Asset, Cadence, Category, defaultCategories, Entry, FlowKind } from './types'
 
@@ -102,7 +102,6 @@ function FinanceApp({ session }: { session: Session }) {
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('sidebarOpen') !== 'false')
   const [catAlerts, setCatAlerts] = useState(() => localStorage.getItem('catAlerts') !== 'false')
   const [toast, setToast] = useState<{kind:FlowKind;text:string}|null>(null)
   const [editEntry, setEditEntry] = useState<Entry | null>(null)
@@ -122,7 +121,6 @@ function FinanceApp({ session }: { session: Session }) {
   }
   useEffect(() => { loadData() }, [userId])
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('theme', theme) }, [theme])
-  useEffect(() => { localStorage.setItem('sidebarOpen', String(sidebarOpen)) }, [sidebarOpen])
   useEffect(() => { localStorage.setItem('catAlerts', String(catAlerts)) }, [catAlerts])
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 2200); return () => window.clearTimeout(timer) }, [toast])
 
@@ -132,8 +130,8 @@ function FinanceApp({ session }: { session: Session }) {
   }
 
   const title = nav.find(x => x.id === page)?.label
-  return <div className={`app-shell ${sidebarOpen?'':'sidebar-collapsed'}`}>
-    <aside className="sidebar"><div className="logo"><span className="brand-mark">₺</span><span>Harcamac</span><button className="sidebar-toggle" title={sidebarOpen?'Menüyü daralt':'Menüyü aç'} onClick={()=>setSidebarOpen(!sidebarOpen)}>{sidebarOpen?<PanelLeftClose/>:<PanelLeftOpen/>}</button></div><nav data-tour="navigation">{nav.map(item => <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => setPage(item.id)}><item.icon /> <span>{item.label}</span></button>)}</nav><div className="sidebar-user"><div className="avatar">{(session.user.user_metadata.full_name || session.user.email || 'H')[0].toUpperCase()}</div><div><b>{session.user.user_metadata.full_name || 'Hesabım'}</b><small>{session.user.email}</small></div><button title="Çıkış yap" onClick={() => supabase.auth.signOut()}><LogOut /></button></div></aside>
+  return <div className="app-shell sidebar-auto">
+    <aside className="sidebar"><div className="logo"><span className="brand-mark">₺</span><span>Harcamac</span></div><nav data-tour="navigation">{nav.map(item => <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => setPage(item.id)}><item.icon /> <span>{item.label}</span></button>)}</nav><div className="sidebar-user"><div className="avatar">{(session.user.user_metadata.full_name || session.user.email || 'H')[0].toUpperCase()}</div><div><b>{session.user.user_metadata.full_name || 'Hesabım'}</b><small>{session.user.email}</small></div><button title="Çıkış yap" onClick={() => supabase.auth.signOut()}><LogOut /></button></div></aside>
     <main className="workspace"><header><div><span className="mobile-logo">Harcamac</span><h1>{title}</h1><p>{page === 'dashboard' ? 'Finansal durumunuza genel bakış' : page === 'transactions' ? 'Tüm gelir ve gider kayıtlarınız' : ''}</p></div><div className="header-actions" data-tour="top-action">{page === 'transactions' && <button className="icon-button" data-tour="category-action" title="Kategoriler" onClick={() => setCategoryOpen(true)}><Tags /></button>}<button className="primary" onClick={() => { setEditEntry(null); setEntryOpen(true) }}><Plus /> <span>Yeni hareket</span></button></div></header>
       {loading ? <div className="loading">Verileriniz getiriliyor…</div> : <>
         {page === 'dashboard' && <Dashboard entries={entries} assets={assets} />}
@@ -147,7 +145,7 @@ function FinanceApp({ session }: { session: Session }) {
     {entryOpen && <EntryModal userId={userId} categories={categories} entry={editEntry} close={() => setEntryOpen(false)} saved={entrySaved} />}
     {categoryOpen && <CategoryModal userId={userId} categories={categories} close={() => setCategoryOpen(false)} reload={loadData} />}
     {setupOpen && <SetupModal userId={userId} close={() => setSetupOpen(false)} saved={() => { setSetupOpen(false); loadData() }} />}
-    {guideOpen && <GuideModal close={() => setGuideOpen(false)} />}
+    {guideOpen && <GuideModal goTo={setPage} close={() => setGuideOpen(false)} />}
     {toast && <CatToast kind={toast.kind} text={toast.text}/>}
   </div>
 }
@@ -206,8 +204,10 @@ function EntryModal({userId,categories,entry,close,saved}:{userId:string;categor
   return <Modal title={entry?'Hareketi düzenle':'Harcama kaydı'} close={close}><form className="form-grid" onSubmit={submit}><div className="segment full"><button type="button" className={kind==='expense'?'active expense':''} onClick={()=>setKind('expense')}>Gider</button><button type="button" className={kind==='income'?'active income':''} onClick={()=>setKind('income')}>Gelir</button></div><label>Başlık<input required maxLength={100} value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Tutar<input required min="0.01" step="0.01" inputMode="decimal" type="number" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Tür<select value={cadence} onChange={e=>setCadence(e.target.value as Cadence)}><option value="one_time">Tek seferlik</option><option value="recurring">Düzenli</option></select></label><label>Kategori<select required value={category} onChange={e=>setCategory(e.target.value)}><option value="">Kategori seçin</option>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Tarih<input required type="date" value={date} onChange={e=>setDate(e.target.value)}/></label>{kind==='expense'&&cadence==='recurring'&&<label>Taksit sayısı<input type="number" inputMode="numeric" min="2" max="120" placeholder="Peşin için boş bırakın" value={installments} onChange={e=>setInstallments(e.target.value)}/></label>}<div className="form-actions full"><button type="button" onClick={close}>Vazgeç</button><button className="primary" disabled={busy}>{busy?'Kaydediliyor…':'Kaydet'}</button></div></form></Modal>
 }
 
-function GuideModal({close}:{close:()=>void}) {
+function guideTarget(spot:string):Page { return spot==='filters'||spot==='category-action'?'transactions':spot==='charts'||spot==='top-action'?'dashboard':spot==='settings'?'settings':'dashboard' }
+function GuideModal({goTo,close}:{goTo:(page:Page)=>void;close:()=>void}) {
   const [step,setStep]=useState(0), item=guideSteps[step]
+  useEffect(()=>{goTo(guideTarget(item.spot))},[item.spot])
   return <div className={`tour-backdrop tour-${item.spot}`}><div className="tour-hole"/><section className="tour-card"><small>{step+1} / {guideSteps.length}</small><h2>{item.title}</h2><p>{item.text}</p><div className="tour-actions"><button onClick={close}>Kapat</button><span>{guideSteps.map((_,i)=><i key={i} className={i===step?'active':''}/>)}</span><button className="primary" onClick={()=>step===guideSteps.length-1?close():setStep(step+1)}>{step===guideSteps.length-1?'Bitir':'Sonraki'}<ChevronRight/></button></div>{step>0&&<button className="tour-prev" onClick={()=>setStep(step-1)}><ChevronLeft/>Geri</button>}</section></div>
 }
 
