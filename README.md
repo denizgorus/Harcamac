@@ -1,6 +1,6 @@
-# Harcamac
+# Harcamaç
 
-Harcamac, iOS icin kisisel gelir, gider, duzenli odeme ve varlik takibi uygulamasidir.
+Harcamaç, iOS icin kisisel gelir, gider, duzenli odeme ve varlik takibi uygulamasidir.
 
 Responsive web surumu `web-supabase` dalindaki `web/` klasorunde gelistirilmektedir. Web kurulumu ve Cloudflare Pages dagitimi icin `web/README.md` dosyasina bakin.
 
