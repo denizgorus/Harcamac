@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Apple, ArrowDownUp, BarChart3, CalendarDays, ChevronRight, CircleDollarSign, LayoutDashboard, LogOut, Menu, Moon, Pencil, PieChart as PieIcon, Plus, Search, Settings, Sun, Tags, Trash2, WalletCards, X } from 'lucide-react'
+import { ArrowDownUp, BarChart3, CalendarDays, ChevronRight, CircleDollarSign, LayoutDashboard, LogOut, Menu, Moon, Pencil, PieChart as PieIcon, Plus, Search, Settings, Sun, Tags, Trash2, WalletCards, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { Asset, Cadence, Category, defaultCategories, Entry, FlowKind } from './types'
 
@@ -41,9 +41,9 @@ function Auth() {
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
   const redirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
 
-  async function socialLogin(provider: 'google' | 'apple') {
+  async function socialLogin() {
     setBusy(true); setMessage('')
-    const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } })
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
     if (error) { setMessage(error.message); setBusy(false) }
   }
 
@@ -70,7 +70,7 @@ function Auth() {
       {message && <div className="form-message">{message}</div>}
       <button className="primary wide" disabled={busy}>{busy ? 'Bekleyin…' : mode === 'login' ? 'Giriş yap' : 'Üye ol'}</button>
       <div className="auth-divider"><span>veya</span></div>
-      <div className="social-buttons"><button type="button" onClick={() => socialLogin('google')} disabled={busy}><span className="google-mark">G</span>Google ile devam et</button><button type="button" onClick={() => socialLogin('apple')} disabled={busy}><Apple/>Apple ile devam et</button></div>
+      <div className="social-buttons"><button type="button" onClick={socialLogin} disabled={busy}><span className="google-mark">G</span>Google ile devam et</button></div>
       <button type="button" className="text-button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setPasswordAgain(''); setCaptchaToken(''); setMessage('') }}>{mode === 'login' ? 'Hesabınız yok mu? Üye olun' : 'Zaten hesabınız var mı? Giriş yapın'}</button>
     </form></section>
   </main>
