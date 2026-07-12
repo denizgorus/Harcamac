@@ -125,11 +125,15 @@ function FinanceApp({ session }: { session: Session }) {
     ])
     setEntries((e.data || []).map((x: any) => ({ ...x, category_name: x.categories?.name || 'Diğer' })))
     let loadedCategories = (c.data || []) as Category[]
-    if (!loadedCategories.length && !c.error) {
-      const { data: seeded, error: seedError } = await supabase.from('categories').insert(defaultCategories.map(category => ({ ...category, user_id: userId }))).select('*').order('name')
-      if (!seedError) {
-        loadedCategories = (seeded || []) as Category[]
-        setSetupOpen(true)
+    if (!c.error) {
+      const existingKeys = new Set(loadedCategories.map(category => `${category.kind}:${category.name.toLocaleLowerCase('tr')}`))
+      const missingDefaults = defaultCategories.filter(category => !existingKeys.has(`${category.kind}:${category.name.toLocaleLowerCase('tr')}`))
+      if (missingDefaults.length) {
+        const { data: seeded, error: seedError } = await supabase.from('categories').insert(missingDefaults.map(category => ({ ...category, user_id: userId }))).select('*').order('name')
+        if (!seedError) {
+          loadedCategories = [...loadedCategories, ...((seeded || []) as Category[])].sort((left, right) => left.name.localeCompare(right.name, 'tr'))
+          if (loadedCategories.length === missingDefaults.length) setSetupOpen(true)
+        }
       }
     }
     setCategories(loadedCategories); setAssets((a.data || []) as Asset[]); setLoading(false)
