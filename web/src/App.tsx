@@ -54,6 +54,21 @@ export default function App() {
   return <FinanceApp session={session} />
 }
 
+function TypingText({ text }: { text: string }) {
+  const [visibleText, setVisibleText] = useState('')
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setVisibleText(text); return }
+    let index = 0
+    const timer = window.setInterval(() => {
+      index += 1
+      setVisibleText(text.slice(0, index))
+      if (index >= text.length) window.clearInterval(timer)
+    }, 58)
+    return () => window.clearInterval(timer)
+  }, [text])
+  return <span className="typing-text" aria-label={text}>{visibleText}<i aria-hidden="true" /></span>
+}
+
 function Auth() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
@@ -93,7 +108,7 @@ function Auth() {
     setBusy(false)
   }
   return <main className="auth-shell">
-    <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div><h1>Paranızın nereye gittiğini bilin.</h1><p>Gelirlerinizi, harcamalarınızı ve varlıklarınızı sade bir ekranda takip edin.</p></div><small>Kişisel finans, daha sakin.</small></section>
+    <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div className="auth-mobile-story"><TypingText text="Paranızın nereye gittiğini bilin." /></div><div className="auth-story-copy"><h1><TypingText text="Paranızın nereye gittiğini bilin." /></h1><p>Gelirlerinizi, harcamalarınızı ve varlıklarınızı sade bir ekranda takip edin.</p></div><small>Kişisel finans, daha sakin.</small></section>
     <section className="auth-panel"><form className="auth-form" onSubmit={submit}>
       <div><h2>{mode === 'login' ? 'Tekrar hoş geldiniz' : 'Hesabınızı oluşturun'}</h2><p>{mode === 'login' ? 'Devam etmek için giriş yapın.' : 'Finans takibinize birkaç saniyede başlayın.'}</p></div>
       {mode === 'signup' && <label>Ad soyad<input required value={name} onChange={e => setName(e.target.value)} autoComplete="name" /></label>}
