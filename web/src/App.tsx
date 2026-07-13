@@ -134,7 +134,8 @@ function FinanceApp({ session }: { session: Session }) {
     ])
     setEntries((e.data || []).map((x: any) => ({ ...x, category_name: x.categories?.name || 'Diğer', category_color: x.categories?.color || '#7b837e' })))
     let loadedCategories = (c.data || []) as Category[]
-    if (!c.error) {
+    const defaultsSeeded = session.user.user_metadata.default_categories_seeded_v1 === true
+    if (!c.error && !defaultsSeeded) {
       const existingKeys = new Set(loadedCategories.map(category => `${category.kind}:${category.name.toLocaleLowerCase('tr')}`))
       const missingDefaults = defaultCategories.filter(category => !existingKeys.has(`${category.kind}:${category.name.toLocaleLowerCase('tr')}`))
       if (missingDefaults.length) {
@@ -154,6 +155,7 @@ function FinanceApp({ session }: { session: Session }) {
         const replacements = new Map(updated.flatMap(result => result.data ? [[result.data.id, result.data as Category] as const] : []))
         loadedCategories = loadedCategories.map(category => replacements.get(category.id) || category)
       }
+      await supabase.auth.updateUser({ data: { ...session.user.user_metadata, default_categories_seeded_v1: true } })
     }
     setCategories(loadedCategories); setAssets((a.data || []) as Asset[]); setLoading(false)
   }
@@ -216,7 +218,7 @@ function Transactions({ entries, categories, onEdit, onDelete }: { entries:Entry
   return <div className="page-content transactions-page"><div className="filters" data-tour="filters"><label className="search"><Search/><input placeholder="Hareket ara" value={query} onChange={e=>setQuery(e.target.value)}/></label><select value={kind} onChange={e=>setKind(e.target.value as any)}><option value="all">Tüm türler</option><option value="expense">Giderler</option><option value="income">Gelirler</option></select><select value={cat} onChange={e=>setCat(e.target.value)}><option value="all">Tüm kategoriler</option>{categories.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select><select value={sort} onChange={e=>setSort(e.target.value as any)}><option value="date_desc">Tarih: yeniden eskiye</option><option value="date_asc">Tarih: eskiden yeniye</option><option value="amount_desc">Tutar: yüksekten düşüğe</option><option value="amount_asc">Tutar: düşükten yükseğe</option></select></div>
     {groups.length?groups.map(([month,list])=><section className="transaction-group" key={month}><div className="month-title"><b>{month}</b><span>{list.length} hareket</span></div><div className="panel"><EntryRows entries={list} actions={{onEdit,onDelete}}/></div></section>):<Empty text="Henüz hareket bulunmuyor."/>}</div>
 }
-function EntryRows({entries,actions}:{entries:Entry[];actions?:{onEdit:(e:Entry)=>void;onDelete:(id:string)=>void}}){return <div className="entry-list">{entries.map(e=><div className="entry-row" key={e.id}><div className={`entry-icon ${e.kind}`}><CircleDollarSign/></div><div className="entry-main"><b>{e.title}</b><span>{e.category_name} · {new Date(`${e.entry_date}T12:00:00`).toLocaleDateString('tr-TR',{day:'numeric',month:'short'})} · {e.cadence==='recurring'?'Düzenli':'Tek seferlik'}</span></div><div className="entry-side">{actions&&<div className="row-actions"><button title="Düzenle" onClick={()=>actions.onEdit(e)}><Pencil/></button><button className="danger" title="Sil" onClick={()=>confirm('Bu hareket silinsin mi?')&&actions.onDelete(e.id)}><Trash2/></button></div>}<div className={`entry-amount ${e.kind}`}><b>{e.kind==='expense'?'-':'+'}{trMoney.format(Number(e.amount))}</b></div></div></div>)}</div>}
+function EntryRows({entries,actions}:{entries:Entry[];actions?:{onEdit:(e:Entry)=>void;onDelete:(id:string)=>void}}){return <div className="entry-list">{entries.map(e=><div className="entry-swipe" key={e.id}><div className="entry-row"><div className={`entry-icon ${e.kind}`}><CircleDollarSign/></div><div className="entry-main"><b>{e.title}</b><span>{e.category_name} · {new Date(`${e.entry_date}T12:00:00`).toLocaleDateString('tr-TR',{day:'numeric',month:'short'})} · {e.cadence==='recurring'?'Düzenli':'Tek seferlik'}</span></div><div className="entry-side"><div className={`entry-amount ${e.kind}`}><b>{e.kind==='expense'?'-':'+'}{trMoney.format(Number(e.amount))}</b></div></div></div>{actions&&<div className="swipe-actions"><button title="Düzenle" onClick={()=>actions.onEdit(e)}><Pencil/><span>Düzenle</span></button><button className="danger" title="Sil" onClick={()=>confirm('Bu hareket silinsin mi?')&&actions.onDelete(e.id)}><Trash2/><span>Sil</span></button></div>}</div>)}</div>}
 
 function Recurring({entries,onEdit}:{entries:Entry[];onEdit:(e:Entry)=>void}) { const list=entries.filter(e=>e.cadence==='recurring'); const inc=list.filter(e=>e.kind==='income').reduce((s,e)=>s+Number(e.amount),0), exp=list.filter(e=>e.kind==='expense').reduce((s,e)=>s+Number(e.amount),0); return <div className="page-content"><section className="metric-grid two"><Metric label="Düzenli gelir" value={inc} tone="green"/><Metric label="Düzenli gider" value={exp} tone="red"/></section><section className="panel"><PanelTitle title="Düzenli hareketler" subtitle="Aylık planınız"/><EntryRows entries={list} actions={{onEdit,onDelete:()=>{}}}/></section></div> }
 
