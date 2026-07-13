@@ -193,7 +193,7 @@ function Auth({theme,setTheme}:{theme:'light'|'dark';setTheme:(theme:'light'|'da
     setMessage(authMessage(result.error) || (mode === 'signup' ? 'Doğrulama bağlantısı e-posta adresinize gönderildi. Gelen kutunuzu kontrol edin.' : ''))
     setBusy(false)
   }
-  return <main className="auth-shell">
+  return <main className={`auth-shell ${mode === 'login' ? 'auth-login' : 'auth-signup'}`}>
     <button type="button" className="auth-theme-toggle" title={theme==='dark'?'Açık temaya geç':'Koyu temaya geç'} aria-label={theme==='dark'?'Açık temaya geç':'Koyu temaya geç'} onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun/>:<Moon/>}</button>
     <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div className="auth-mobile-story"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><div className="auth-story-copy"><h1><TypingText text={headline} /></h1></div><small className="auth-description-footer">{authDescription}</small></section>
     <section className="auth-panel"><form className="auth-form" onSubmit={submit}>
