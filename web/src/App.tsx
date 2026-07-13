@@ -59,14 +59,16 @@ function authMessage(error: { code?: string; message?: string } | null) {
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'light')
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true) })
     const { data } = supabase.auth.onAuthStateChange((_event, value) => setSession(value))
     return () => data.subscription.unsubscribe()
   }, [])
+  useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('theme', theme) }, [theme])
   if (!authReady) return <div className="splash"><div className="brand-mark">₺</div><b>Harcamaç</b></div>
-  if (!session) return <Auth />
-  return <FinanceApp session={session} />
+  if (!session) return <Auth theme={theme} setTheme={setTheme} />
+  return <FinanceApp session={session} theme={theme} setTheme={setTheme} />
 }
 
 function TypingText({ text }: { text: string }) {
@@ -86,7 +88,7 @@ function TypingText({ text }: { text: string }) {
   return <span className="typing-text" aria-label={text}>{visibleText}<i aria-hidden="true" /></span>
 }
 
-function Auth() {
+function Auth({theme,setTheme}:{theme:'light'|'dark';setTheme:(theme:'light'|'dark')=>void}) {
   const [headline] = useState(() => authHeadlines[Math.floor(Math.random() * authHeadlines.length)])
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
@@ -126,6 +128,7 @@ function Auth() {
     setBusy(false)
   }
   return <main className="auth-shell">
+    <button type="button" className="auth-theme-toggle" title={theme==='dark'?'Açık temaya geç':'Koyu temaya geç'} aria-label={theme==='dark'?'Açık temaya geç':'Koyu temaya geç'} onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun/>:<Moon/>}</button>
     <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div className="auth-mobile-story"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><div className="auth-story-copy"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><small>Kişisel finans, daha sakin.</small></section>
     <section className="auth-panel"><form className="auth-form" onSubmit={submit}>
       <div><h2>{mode === 'login' ? 'Tekrar hoş geldiniz' : 'Hesabınızı oluşturun'}</h2><p>{mode === 'login' ? 'Devam etmek için giriş yapın.' : 'Finans takibinize birkaç saniyede başlayın.'}</p></div>
@@ -133,7 +136,7 @@ function Auth() {
       <label>E-posta<input required type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" /></label>
       <label>Şifre<input required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /></label>
       {mode === 'signup' && <label>Şifreyi doğrula<input required minLength={8} type="password" value={passwordAgain} onChange={e => setPasswordAgain(e.target.value)} autoComplete="new-password" /></label>}
-      {turnstileSiteKey && <div className="turnstile-wrap"><Turnstile siteKey={turnstileSiteKey} options={{ language: 'tr', theme: 'auto' }} onSuccess={setCaptchaToken} onExpire={() => setCaptchaToken('')} onError={() => setCaptchaToken('')} /></div>}
+      {turnstileSiteKey && <div className="turnstile-wrap"><Turnstile siteKey={turnstileSiteKey} options={{ language: 'tr', theme }} onSuccess={setCaptchaToken} onExpire={() => setCaptchaToken('')} onError={() => setCaptchaToken('')} /></div>}
 	      {message && <div className="form-message">{message}</div>}
 	      <button className="primary wide" disabled={busy}>{busy ? 'Bekleyin…' : mode === 'login' ? 'Giriş yap' : 'Üye ol'}</button>
 	      {mode === 'login' && <button type="button" className="text-button small-link" onClick={resetPassword} disabled={busy}>Şifremi unuttum</button>}
@@ -144,7 +147,7 @@ function Auth() {
   </main>
 }
 
-function FinanceApp({ session }: { session: Session }) {
+function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'light'|'dark'; setTheme:(theme:'light'|'dark')=>void }) {
   const [page, setPage] = useState<Page>('dashboard')
   const [entries, setEntries] = useState<Entry[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -157,7 +160,6 @@ function FinanceApp({ session }: { session: Session }) {
   const [catAlerts, setCatAlerts] = useState(() => localStorage.getItem('catAlerts') !== 'false')
   const [toast, setToast] = useState<{kind:FlowKind;text:string}|null>(null)
   const [editEntry, setEditEntry] = useState<Entry | null>(null)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'light')
   const userId = session.user.id
 
   async function loadData() {
@@ -194,7 +196,6 @@ function FinanceApp({ session }: { session: Session }) {
     setCategories(loadedCategories); setAssets((a.data || []) as Asset[]); setLoading(false)
   }
   useEffect(() => { loadData() }, [userId])
-  useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('theme', theme) }, [theme])
   useEffect(() => { localStorage.setItem('catAlerts', String(catAlerts)) }, [catAlerts])
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 2200); return () => window.clearTimeout(timer) }, [toast])
 
