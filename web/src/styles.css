@@ -60,10 +60,9 @@
   .entry-main{grid-area:main;align-self:center;min-width:0}
   .entry-main b{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.82rem;line-height:1.25}
   .entry-main span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.65rem;margin-top:.3rem}
-  .entry-side{grid-area:side;align-self:stretch;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:.3rem;min-width:0;width:100%}
+  .entry-side{grid-area:side;align-self:stretch;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:.35rem;min-width:0;width:100%}
   .entry-amount{grid-area:auto;text-align:right;padding:0;max-width:100%}
   .entry-amount b{font-size:clamp(.72rem,3.2vw,.84rem);line-height:1.2}
-  .entry-amount span{font-size:.58rem;margin-top:.2rem;white-space:nowrap}
   .row-actions{grid-area:auto;display:flex;justify-content:flex-end;padding:0;gap:.25rem}
   .row-actions button{width:clamp(1.65rem,7.5vw,1.9rem);height:clamp(1.55rem,7vw,1.8rem);padding:0;display:grid;place-items:center;border-radius:.4rem;background:var(--surface-2)}
   .row-actions svg{width:.88rem;height:.88rem}
