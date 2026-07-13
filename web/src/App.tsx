@@ -32,6 +32,21 @@ const defaultWidgets: ChartWidget[] = [
   { id:'expense-pie', title:'Gider dağılımı', chart:'pie', metric:'categoryExpense', range:'month' },
   { id:'flow', title:'Gelir ve gider akışı', chart:'bar', metric:'both', range:'all' }
 ]
+const authHeadlines = [
+  'Paranızın nereye gittiğini bilin.',
+  'Her liranın hikayesini tek ekranda görün.',
+  'Bugünün harcamaları yarının planına dönüşsün.',
+  'Bütçeniz netleşsin, kararlarınız kolaylaşsın.',
+  'Gelirinizi yönetin, hedeflerinize yaklaşın.',
+  'Küçük kayıtlarla büyük resmi görün.',
+  'Finansal düzeniniz bir dokunuşla başlasın.',
+  'Harcamalarınızı izleyin, kontrolü elinizde tutun.',
+  'Rakamlarınız konuşsun, siz geleceği planlayın.',
+  'Birikimlerinize giden yolu görünür kılın.',
+  'Paranızı takip edin, hayatınızı sadeleştirin.',
+  'Bütçenizi anlayın, geleceğinizi güvenle kurun.'
+]
+const authDescription = 'Gelirlerinizi, harcamalarınızı ve varlıklarınızı sade bir ekranda takip edin.'
 
 function authMessage(error: { code?: string; message?: string } | null) {
   if (!error) return ''
@@ -72,6 +87,7 @@ function TypingText({ text }: { text: string }) {
 }
 
 function Auth() {
+  const [headline] = useState(() => authHeadlines[Math.floor(Math.random() * authHeadlines.length)])
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -110,7 +126,7 @@ function Auth() {
     setBusy(false)
   }
   return <main className="auth-shell">
-    <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div className="auth-mobile-story"><TypingText text="Paranızın nereye gittiğini bilin." /></div><div className="auth-story-copy"><h1><TypingText text="Paranızın nereye gittiğini bilin." /></h1><p>Gelirlerinizi, harcamalarınızı ve varlıklarınızı sade bir ekranda takip edin.</p></div><small>Kişisel finans, daha sakin.</small></section>
+    <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div className="auth-mobile-story"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><div className="auth-story-copy"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><small>Kişisel finans, daha sakin.</small></section>
     <section className="auth-panel"><form className="auth-form" onSubmit={submit}>
       <div><h2>{mode === 'login' ? 'Tekrar hoş geldiniz' : 'Hesabınızı oluşturun'}</h2><p>{mode === 'login' ? 'Devam etmek için giriş yapın.' : 'Finans takibinize birkaç saniyede başlayın.'}</p></div>
       {mode === 'signup' && <label>Ad soyad<input required value={name} onChange={e => setName(e.target.value)} autoComplete="name" /></label>}
