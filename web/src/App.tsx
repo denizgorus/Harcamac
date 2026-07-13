@@ -44,7 +44,73 @@ const authHeadlines = [
   'Rakamlarınız konuşsun, siz geleceği planlayın.',
   'Birikimlerinize giden yolu görünür kılın.',
   'Paranızı takip edin, hayatınızı sadeleştirin.',
-  'Bütçenizi anlayın, geleceğinizi güvenle kurun.'
+  'Bütçenizi anlayın, geleceğinizi güvenle kurun.',
+  'Geliriniz ve gideriniz aynı hikayede buluşsun.',
+  'Harcamalar görünür olsun, hedefler yakınlaşsın.',
+  'Planlı bir bütçe, daha sakin bir zihin demektir.',
+  'Paranızı değil, önceliklerinizi yönetin.',
+  'Her kayıt, daha güçlü bir finansal alışkanlık olsun.',
+  'Ay sonunu beklemeden bütçenizi görün.',
+  'Finansal kararlarınız tahmine değil veriye dayansın.',
+  'Kazandığınızı bilin, harcadığınızı anlayın.',
+  'Bütçenizin ritmini yakalayın.',
+  'Gereksiz harcamaları fark edin, önemli hedeflere yer açın.',
+  'Paranızı izlemek, geleceğinizi şekillendirmektir.',
+  'Gelir ve gider dengeniz hep gözünüzün önünde olsun.',
+  'Finansal hedeflerinizi günlük alışkanlıklara dönüştürün.',
+  'Bütçenize bakınca ne olduğunu hemen anlayın.',
+  'Her ayı daha bilinçli tamamlayın.',
+  'Harcamalarınız da planlarınız kadar düzenli olsun.',
+  'Paranız için net, sade ve güçlü bir başlangıç.',
+  'Bütçenizi karmaşadan çıkarın.',
+  'Birikim hedefiniz her gün biraz daha yaklaşsın.',
+  'Finansal görünümünüz tek bakışta netleşsin.',
+  'Harcadığınız her tutar doğru kategoriye yerleşsin.',
+  'Düzenli takip, rahat kararlar getirsin.',
+  'Paranızı yönetmek gününüzü zorlaştırmasın.',
+  'Ayın hesabını ay sonunda değil, bugün görün.',
+  'Gelir akışınızı tanıyın, harcama alışkanlıklarınızı geliştirin.',
+  'Bütçenizde sürprizlere daha az yer bırakın.',
+  'Finansal kontrol, küçük bir kayıtla başlar.',
+  'Her hareketinizi anlamlı bir bütçeye dönüştürün.',
+  'Paranızı nereye ayırdığınızı güvenle görün.',
+  'Bütçeniz hedeflerinize göre şekillensin.',
+  'Harcama alışkanlıklarınızı rakamlarla keşfedin.',
+  'Daha az belirsizlik, daha çok finansal güven.',
+  'Gelirinize yön verin, giderlerinize sınır koyun.',
+  'Bütçenizi takip etmek zahmet değil alışkanlık olsun.',
+  'Aylık dengenizi her gün yanınızda taşıyın.',
+  'Paranızı sade bir düzende yönetin.',
+  'Bugünü kaydedin, yarını daha iyi planlayın.',
+  'Her kategori finansal hikayenizin bir parçası olsun.',
+  'Finansal ilerlemenizi adım adım görün.',
+  'Bütçenizde kontrolü yeniden kazanın.',
+  'Harcamalarınızı anlayınca hedefleriniz netleşir.',
+  'Geliriniz değişse de kontrol sizde kalsın.',
+  'Paranızı planlayın, kararlarınızı rahatlatın.',
+  'Finansal hedeflerinizi görünür tutun.',
+  'Küçük harcamaları kaçırmadan büyük resmi koruyun.',
+  'Bütçenizde neyin önemli olduğuna siz karar verin.',
+  'Her ay için daha net bir başlangıç yapın.',
+  'Gelir ve giderlerinizi tek bir düzende buluşturun.',
+  'Finansal alışkanlıklarınızı sessizce güçlendirin.',
+  'Paranızla ilgili soruların cevabı elinizin altında olsun.',
+  'Bütçenizi takip edin, kendinize daha çok alan açın.',
+  'Harcamalarınızı azaltmadan önce onları anlayın.',
+  'Birikim yolculuğunuzu rakamlarla görün.',
+  'Finansal düzen, günlük hayatınıza uyum sağlasın.',
+  'Ay boyunca bütçenizden kopmayın.',
+  'Her işlem daha bilinçli bir karara dönüşsün.',
+  'Kazancınızı koruyun, hedeflerinizi besleyin.',
+  'Bütçeniz size yük değil yol gösterici olsun.',
+  'Rakamlar sadeleşsin, planlar güçlensin.',
+  'Paranızın kontrolü her zaman sizde olsun.',
+  'Bugünün dengesi yarının özgürlüğünü kursun.',
+  'Finansal yolculuğunuzu tek bakışta izleyin.',
+  'Her ay bütçenizi biraz daha iyi tanıyın.',
+  'Gelirinizin gücünü doğru planla artırın.',
+  'Harcamalarınızı kaydedin, ilerlemenizi görün.',
+  'Finansal huzur net bir bütçeyle başlasın.'
 ]
 const authDescription = 'Gelirlerinizi, harcamalarınızı ve varlıklarınızı sade bir ekranda takip edin.'
 
@@ -81,8 +147,8 @@ function TypingText({ text }: { text: string }) {
         index += 1
         setVisibleText(text.slice(0, index))
         if (index >= text.length && typingTimer) window.clearInterval(typingTimer)
-      }, 90)
-    }, 550)
+      }, 70)
+    }, 450)
     return () => { window.clearTimeout(startTimer); if (typingTimer) window.clearInterval(typingTimer) }
   }, [text])
   return <span className="typing-text" aria-label={text}>{visibleText}<i aria-hidden="true" /></span>
@@ -129,7 +195,7 @@ function Auth({theme,setTheme}:{theme:'light'|'dark';setTheme:(theme:'light'|'da
   }
   return <main className="auth-shell">
     <button type="button" className="auth-theme-toggle" title={theme==='dark'?'Açık temaya geç':'Koyu temaya geç'} aria-label={theme==='dark'?'Açık temaya geç':'Koyu temaya geç'} onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun/>:<Moon/>}</button>
-    <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div className="auth-mobile-story"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><div className="auth-story-copy"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><small>Kişisel finans, daha sakin.</small></section>
+    <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div className="auth-mobile-story"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><div className="auth-story-copy"><h1><TypingText text={headline} /></h1></div><small className="auth-description-footer">{authDescription}</small></section>
     <section className="auth-panel"><form className="auth-form" onSubmit={submit}>
       <div><h2>{mode === 'login' ? 'Tekrar hoş geldiniz' : 'Hesabınızı oluşturun'}</h2><p>{mode === 'login' ? 'Devam etmek için giriş yapın.' : 'Finans takibinize birkaç saniyede başlayın.'}</p></div>
       {mode === 'signup' && <label>Ad soyad<input required value={name} onChange={e => setName(e.target.value)} autoComplete="name" /></label>}
