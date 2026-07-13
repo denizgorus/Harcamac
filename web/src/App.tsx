@@ -29,8 +29,8 @@ type ChartMetric = 'both' | 'income' | 'expense' | 'categoryExpense'
 type ChartRange = 'month' | 'week' | 'all'
 type ChartWidget = { id:string; title:string; chart:ChartKind; metric:ChartMetric; range:ChartRange }
 const defaultWidgets: ChartWidget[] = [
-  { id:'flow', title:'Gelir ve gider akışı', chart:'bar', metric:'both', range:'all' },
-  { id:'expense-pie', title:'Gider dağılımı', chart:'pie', metric:'categoryExpense', range:'month' }
+  { id:'expense-pie', title:'Gider dağılımı', chart:'pie', metric:'categoryExpense', range:'month' },
+  { id:'flow', title:'Gelir ve gider akışı', chart:'bar', metric:'both', range:'all' }
 ]
 
 function authMessage(error: { code?: string; message?: string } | null) {
