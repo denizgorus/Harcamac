@@ -2,7 +2,7 @@ export type FlowKind = 'income' | 'expense'
 export type Cadence = 'one_time' | 'recurring'
 
 export interface Entry {
-  id: string; user_id: string; title: string; category_id: string | null; category_name?: string;
+  id: string; user_id: string; title: string; category_id: string | null; category_name?: string; category_color?: string;
   amount: number; kind: FlowKind; cadence: Cadence; entry_date: string; note: string;
   installment_count: number | null; notification_enabled: boolean; created_at?: string
 }
