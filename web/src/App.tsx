@@ -13,6 +13,27 @@ const trMonth = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric
 const today = new Date().toISOString().slice(0, 10)
 const MONTHLY_BALANCE_SYMBOL = 'AYLIK-DENGE'
 
+function normalizeSearch(value:string) {
+  const replacements:Record<string,string>={ç:'c',ğ:'g',ı:'i',ö:'o',ş:'s',ü:'u'}
+  return value.toLocaleLowerCase('tr-TR').replace(/[çğıöşü]/g,letter=>replacements[letter]).replace(/[^a-z0-9]+/g,' ').trim()
+}
+
+function assetSearchScore(item:AssetCatalogItem,query:string) {
+  const terms=normalizeSearch(query).split(' ').filter(Boolean)
+  if(!terms.length)return 0
+  const words=normalizeSearch(`${item.symbol} ${item.name}`).split(' ').filter(Boolean)
+  let score=0
+  for(const term of terms){
+    const exact=words.findIndex(word=>word===term)
+    const prefix=exact<0?words.findIndex(word=>word.startsWith(term)):-1
+    const partial=exact<0&&prefix<0?words.findIndex(word=>word.includes(term)):-1
+    if(exact<0&&prefix<0&&partial<0)return null
+    score+=exact>=0?exact:prefix>=0?20+prefix:40+partial
+  }
+  if(normalizeSearch(item.symbol)===terms.join(''))score-=1000
+  return score
+}
+
 function currentMonthlyBalance(entries: Entry[]) {
   const now = new Date()
   return entries.filter(entry => {
@@ -618,7 +639,7 @@ function AssetModal({userId,assets,close,saved,assetsChanged}:{userId:string;ass
   const symbolStep=hasExchangeStep?2:1, purchaseStep=symbolStep+1, unitsStep=symbolStep+2
   const priceCurrency=exchange==='NASDAQ'||exchange==='NYSE'||exchange==='ABD'?'$':exchange==='AVRUPA'?'€':'₺'
   const markets=[{id:'BIST',name:'Borsa İstanbul',note:'Türkiye',logo:'borsa-istanbul.png'},{id:'NASDAQ',name:'NASDAQ',note:'Yakında',logo:'nasdaq.svg',disabled:true},{id:'NYSE',name:'NYSE',note:'Yakında',logo:'nyse.svg',disabled:true},{id:'AVRUPA',name:'Euronext',note:'Yakında',logo:'euronext.svg',disabled:true}]
-  const matches=useMemo(()=>assetCatalog.filter(item=>item.kind===kind&&(!hasExchangeStep||item.exchange===exchange)&&(item.name.toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr'))||item.symbol.toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr')))),[kind,exchange,hasExchangeStep,query])
+  const matches=useMemo(()=>assetCatalog.flatMap(item=>{if(item.kind!==kind||(hasExchangeStep&&item.exchange!==exchange))return [];const score=assetSearchScore(item,query);return score===null?[]:[{item,score}]}).sort((left,right)=>left.score-right.score||left.item.name.localeCompare(right.item.name,'tr')).map(result=>result.item),[kind,exchange,hasExchangeStep,query])
   useEffect(()=>{sessionStorage.setItem('harcamac-asset-draft',JSON.stringify({step,kind,exchange,query,purchaseDate,units,price,selected:selected?{kind:selected.kind,symbol:selected.symbol,exchange:selected.exchange,dataSource:selected.dataSource}:undefined}))},[step,kind,exchange,query,purchaseDate,units,price,selected])
   useEffect(()=>{if(!selected||!purchaseDate)return;let cancelled=false;setBusy(true);setMessage('');fetchHistoricalAssetPrice(selected,purchaseDate).then(value=>{if(cancelled)return;if(value){setPrice(String(value));setMessage('Alış tarihindeki fiyat dolduruldu.')}}).catch(()=>{if(!cancelled)setMessage('Bu tarih için fiyat alınamadı, alış fiyatını elle girebilirsin.')}).finally(()=>{if(!cancelled)setBusy(false)});return()=>{cancelled=true}},[selected,purchaseDate])
   function chooseKind(value:string){setKind(value);setExchange(value==='Hisse'?'BIST':'');setStep(0);setSelected(null);setQuery('');setPrice('');setMessage('')}
