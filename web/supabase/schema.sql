@@ -22,9 +22,26 @@ create table if not exists public.assets (
 );
 alter table public.assets add column if not exists purchase_date date;
 
+create table if not exists public.app_reports (
+  id uuid primary key default gen_random_uuid(),
+  report_type text not null check (report_type in ('error', 'feedback')),
+  reporter_email text,
+  action text,
+  message text,
+  technical text,
+  context jsonb not null default '{}'::jsonb,
+  page text,
+  url text,
+  user_agent text,
+  occurred_at timestamptz,
+  email_status text not null default 'stored',
+  created_at timestamptz not null default now()
+);
+
 alter table public.categories enable row level security;
 alter table public.entries enable row level security;
 alter table public.assets enable row level security;
+alter table public.app_reports enable row level security;
 create policy "categories_own_rows" on public.categories for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "entries_own_rows" on public.entries for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "assets_own_rows" on public.assets for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
