@@ -18,6 +18,7 @@ const rangePeriods: Record<string, number> = {
   '6A': 6,
   '1Y': 12,
   '5Y': 60,
+  'Maks.': 60,
 }
 
 async function tefasRequest(path: string, body: Record<string, unknown>) {
@@ -58,11 +59,21 @@ Deno.serve(async request => {
     const rows = Array.isArray(payload?.resultList) ? payload.resultList : []
 
     if (range) {
-      const cutoff = Date.now() - ({ '1G': 2, '1H': 8, '1A': 32, '3A': 95, '6A': 190, '1Y': 370, '5Y': 1835 }[range] || 32) * 86400000
+      const now = Date.now()
+      const start = new Date(now)
+      if (range === '1G') start.setDate(start.getDate() - 1)
+      if (range === '1H') start.setDate(start.getDate() - 7)
+      if (range === '1A') start.setMonth(start.getMonth() - 1)
+      if (range === '3A') start.setMonth(start.getMonth() - 3)
+      if (range === '6A') start.setMonth(start.getMonth() - 6)
+      if (range === '1Y') start.setFullYear(start.getFullYear() - 1)
+      if (range === '5Y') start.setFullYear(start.getFullYear() - 5)
+      if (range === 'Maks.') start.setTime(0)
+      if (range !== '1G' && range !== '1H') start.setHours(0, 0, 0, 0)
       const points = rows.flatMap((item: { tarih?: string; fiyat?: number }) => {
         const timestamp = item.tarih ? Math.floor(new Date(`${item.tarih}T12:00:00+03:00`).getTime() / 1000) : 0
-        return timestamp * 1000 >= cutoff && Number(item.fiyat) > 0 ? [{ timestamp, price: Number(item.fiyat) }] : []
-      })
+        return timestamp * 1000 >= start.getTime() && timestamp * 1000 <= now && Number(item.fiyat) > 0 ? [{ timestamp, price: Number(item.fiyat) }] : []
+      }).sort((left: { timestamp: number }, right: { timestamp: number }) => left.timestamp - right.timestamp)
       return new Response(JSON.stringify({ symbol, points }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })

@@ -10,7 +10,7 @@ export type MarketPrice = {
   previousClose?: number
 }
 
-export type MarketRange = '1G' | '1H' | '1A' | '3A' | '6A' | '1Y' | '5Y'
+export type MarketRange = '1G' | '1H' | '1A' | '3A' | '6A' | '1Y' | '5Y' | 'Maks.'
 export type MarketHistoryPoint = { timestamp: number; price: number }
 export type FundSnapshot = {
   fonKategori?: string
@@ -160,7 +160,7 @@ export async function fetchHistoricalAssetPrice(item: AssetCatalogItem, date: st
   if (item.kind === 'Hisse' || item.kind === 'Fon') {
     const symbol = marketSymbolFor(item)
     if (!import.meta.env.DEV) {
-      const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols: [symbol], date } })
+    const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols: [symbol], date, preserveSymbols: true } })
       const quote = !error && Array.isArray(data?.quotes) ? data.quotes[0] : null
       if (quote?.price) return Number(quote.price)
     }
@@ -219,7 +219,7 @@ export async function fetchBistPrices(assets: Asset[]): Promise<MarketPrice[]> {
   let bistQuotes: MarketPrice[] = []
 
   if (symbols.length) {
-    const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols } })
+    const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols, preserveSymbols: true } })
     if (!error && Array.isArray(data?.quotes)) {
       bistQuotes = bistAssets.flatMap(asset => {
         const symbol = symbolsById.get(asset.id)
@@ -246,48 +246,75 @@ export async function fetchBistPrices(assets: Asset[]): Promise<MarketPrice[]> {
   return [...bistQuotes, ...tefasQuotes]
 }
 
-const rangeDays: Record<MarketRange, number> = { '1G': 1, '1H': 7, '1A': 30, '3A': 90, '6A': 180, '1Y': 365, '5Y': 1825 }
 const yahooRanges: Record<MarketRange, { range: string; interval: string }> = {
-  '1G': { range: '1d', interval: '5m' }, '1H': { range: '5d', interval: '30m' },
+  '1G': { range: '1d', interval: '5m' }, '1H': { range: '7d', interval: '30m' },
   '1A': { range: '1mo', interval: '1d' }, '3A': { range: '3mo', interval: '1d' },
-  '6A': { range: '6mo', interval: '1d' }, '1Y': { range: '1y', interval: '1wk' }, '5Y': { range: '5y', interval: '1mo' },
+  '6A': { range: '6mo', interval: '1d' }, '1Y': { range: '1y', interval: '1d' }, '5Y': { range: '5y', interval: '1wk' },
+  'Maks.': { range: 'max', interval: '1mo' },
+}
+
+export function marketRangeStart(range: MarketRange, end = new Date()) {
+  const start = new Date(end)
+  if (range === '1G') start.setDate(start.getDate() - 1)
+  if (range === '1H') start.setDate(start.getDate() - 7)
+  if (range === '1A') start.setMonth(start.getMonth() - 1)
+  if (range === '3A') start.setMonth(start.getMonth() - 3)
+  if (range === '6A') start.setMonth(start.getMonth() - 6)
+  if (range === '1Y') start.setFullYear(start.getFullYear() - 1)
+  if (range === '5Y') start.setFullYear(start.getFullYear() - 5)
+  if (range === 'Maks.') start.setTime(0)
+  if (range !== '1G' && range !== '1H') start.setHours(0, 0, 0, 0)
+  return start
+}
+
+function normalizeHistory(points: MarketHistoryPoint[], range: MarketRange) {
+  const now = Date.now()
+  const start = marketRangeStart(range).getTime()
+  const eligible = points.filter(point => Number.isFinite(point.timestamp) && Number.isFinite(point.price) && point.price > 0 && point.timestamp * 1000 <= now).sort((left, right) => left.timestamp - right.timestamp)
+  const valid = eligible.filter(point => point.timestamp * 1000 >= start)
+  const source = range === '1G' && valid.length < 2 ? eligible.slice(-2) : valid
+  const byTimestamp = new Map<number, MarketHistoryPoint>()
+  source.forEach(point => byTimestamp.set(Number(point.timestamp), { timestamp: Number(point.timestamp), price: Number(point.price) }))
+  return [...byTimestamp.values()].sort((left, right) => left.timestamp - right.timestamp)
 }
 
 async function fetchYahooHistory(symbol: string, range: MarketRange): Promise<MarketHistoryPoint[]> {
   const selection = yahooRanges[range]
   if (!import.meta.env.DEV) {
-    const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols: [symbol], range } })
+    const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols: [symbol], range, preserveSymbols: true } })
     const points = !error && Array.isArray(data?.quotes?.[0]?.points) ? data.quotes[0].points : []
-    if (points.length > 1) return points as MarketHistoryPoint[]
+    if (points.length > 1) return normalizeHistory(points as MarketHistoryPoint[], range)
   }
   const base = import.meta.env.DEV ? '/api/yahoo' : 'https://query2.finance.yahoo.com'
-  const response = await fetch(`${base}/v8/finance/chart/${encodeURIComponent(symbol)}?range=${selection.range}&interval=${selection.interval}`)
+  const query = range === '1H'
+    ? `period1=${Math.floor(marketRangeStart(range).getTime() / 1000)}&period2=${Math.floor(Date.now() / 1000)}&interval=${selection.interval}`
+    : `range=${selection.range}&interval=${selection.interval}`
+  const response = await fetch(`${base}/v8/finance/chart/${encodeURIComponent(symbol)}?${query}`)
   if (!response.ok) throw new Error(`${symbol} grafiği alınamadı`)
   const payload = await response.json()
   const result = payload?.chart?.result?.[0]
   const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : []
   const closes = Array.isArray(result?.indicators?.quote?.[0]?.close) ? result.indicators.quote[0].close : []
-  return timestamps.flatMap((timestamp: number, index: number) => typeof closes[index] === 'number' ? [{ timestamp, price: closes[index] }] : [])
+  return normalizeHistory(timestamps.flatMap((timestamp: number, index: number) => typeof closes[index] === 'number' ? [{ timestamp, price: closes[index] }] : []), range)
 }
 
 async function fetchTefasHistory(symbol: string, range: MarketRange) {
   if (!import.meta.env.DEV) {
     const { data, error } = await supabase.functions.invoke('tefas-fund-prices', { body: { symbol, range } })
-    if (!error && Array.isArray(data?.points) && data.points.length > 1) return data.points as MarketHistoryPoint[]
+    if (!error && Array.isArray(data?.points) && data.points.length > 1) return normalizeHistory(data.points as MarketHistoryPoint[], range)
     throw new Error(`${symbol} TEFAS grafiği alınamadı`)
   }
-  const period = ({ '1G': 1, '1H': 1, '1A': 1, '3A': 3, '6A': 6, '1Y': 12, '5Y': 60 } as const)[range]
+  const period = ({ '1G': 1, '1H': 1, '1A': 1, '3A': 3, '6A': 6, '1Y': 12, '5Y': 60, 'Maks.': 60 } as const)[range]
   const response = await fetch('/api/tefas/api/funds/fonFiyatBilgiGetir', {
     method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ fonKodu: symbol, dil: 'TR', periyod: String(period) }),
   })
   if (!response.ok) throw new Error(`${symbol} TEFAS grafiği alınamadı`)
   const payload = await response.json()
-  const cutoff = Date.now() - rangeDays[range] * 86400000
-  return (Array.isArray(payload?.resultList) ? payload.resultList : []).flatMap((item: { tarih?: string; fiyat?: number }) => {
+  return normalizeHistory((Array.isArray(payload?.resultList) ? payload.resultList : []).flatMap((item: { tarih?: string; fiyat?: number }) => {
     const timestamp = item.tarih ? Math.floor(new Date(`${item.tarih}T12:00:00+03:00`).getTime() / 1000) : 0
-    return timestamp * 1000 >= cutoff && Number(item.fiyat) > 0 ? [{ timestamp, price: Number(item.fiyat) }] : []
-  })
+    return Number(item.fiyat) > 0 ? [{ timestamp, price: Number(item.fiyat) }] : []
+  }), range)
 }
 
 export async function fetchFundSnapshot(symbol: string): Promise<FundSnapshot | null> {
@@ -305,26 +332,13 @@ export async function fetchFundSnapshot(symbol: string): Promise<FundSnapshot | 
   return Array.isArray(payload?.resultList) ? payload.resultList[0] || null : null
 }
 
-function fallbackHistory(asset: Asset, range: MarketRange): MarketHistoryPoint[] {
-  const points = range === '1G' ? 36 : range === '1H' ? 42 : 48
-  const end = Date.now()
-  const start = end - rangeDays[range] * 86400000
-  const from = Math.max(0.0001, Number(asset.average_cost) || Number(asset.current_price) || 1)
-  const to = Math.max(0.0001, Number(asset.current_price) || from)
-  return Array.from({ length: points }, (_, index) => {
-    const progress = index / (points - 1)
-    const wave = Math.sin(index * 1.73) * 0.012 + Math.sin(index * 0.47) * 0.008
-    return { timestamp: Math.round((start + (end - start) * progress) / 1000), price: Math.max(0.0001, from + (to - from) * progress) * (1 + wave) }
-  })
-}
-
 export async function fetchAssetHistory(asset: Asset, range: MarketRange): Promise<MarketHistoryPoint[]> {
   const item = assetCatalog.find(candidate => candidate.kind === asset.kind && candidate.symbol === asset.symbol)
     || assetCatalog.find(candidate => candidate.symbol === asset.symbol)
   try {
     if (item?.dataSource === 'tefas') {
       const points = await fetchTefasHistory(item.symbol, range)
-      if (points.length > 1) return points
+      if (points.length > 1) return normalizeHistory(points, range)
     }
     if (!item || item.kind !== 'Para' || item.symbol !== 'TL') {
       const symbol = item ? marketSymbolFor(item) : asset.kind === 'Hisse' ? bistYahooSymbol(asset.symbol) : asset.symbol
@@ -336,8 +350,8 @@ export async function fetchAssetHistory(asset: Asset, range: MarketRange): Promi
         const usdTry = await fetchHistoricalWithYahoo('USDTRY=X', localDay(new Date()))
         points = points.map(point => ({ ...point, price: point.price * usdTry }))
       }
-      if (points.length > 1) return points
+      if (points.length > 1) return normalizeHistory(points, range)
     }
-  } catch { /* Fall back to the position curve when a provider is unavailable. */ }
-  return fallbackHistory(asset, range)
+  } catch { /* The chart stays empty when the provider is unavailable. */ }
+  return []
 }

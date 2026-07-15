@@ -41,19 +41,24 @@ Deno.serve(async request => {
     const body = await request.json()
     const symbols = Array.isArray(body?.symbols) ? body.symbols.map(String) : []
     const dateRange = unixDayRange(typeof body?.date === 'string' ? body.date : undefined)
-    const uniqueSymbols = [...new Set(symbols.map(yahooSymbol).filter(Boolean))]
+    const preserveSymbols = body?.preserveSymbols === true
+    const uniqueSymbols = [...new Set(symbols.map(symbol => preserveSymbols ? symbol.trim().toUpperCase() : yahooSymbol(symbol)).filter(Boolean))]
     const ranges: Record<string, { range: string; interval: string }> = {
-      '1G': { range: '1d', interval: '5m' }, '1H': { range: '5d', interval: '30m' },
+      '1G': { range: '1d', interval: '5m' }, '1H': { range: '7d', interval: '30m' },
       '1A': { range: '1mo', interval: '1d' }, '3A': { range: '3mo', interval: '1d' },
-      '6A': { range: '6mo', interval: '1d' }, '1Y': { range: '1y', interval: '1wk' },
-      '5Y': { range: '5y', interval: '1mo' },
+      '6A': { range: '6mo', interval: '1d' }, '1Y': { range: '1y', interval: '1d' },
+      '5Y': { range: '5y', interval: '1wk' },
+      'Maks.': { range: 'max', interval: '1mo' },
     }
     const historyRange = typeof body?.range === 'string' ? ranges[body.range] : null
 
     const quotes = await Promise.all(uniqueSymbols.map(async symbol => {
+      const exactRange = body?.range === '1H'
+        ? `period1=${Math.floor(Date.now() / 1000) - 7 * 86400}&period2=${Math.floor(Date.now() / 1000)}&interval=30m`
+        : null
       const query = dateRange
         ? `period1=${dateRange.period1}&period2=${dateRange.period2}&interval=1d`
-        : historyRange ? `range=${historyRange.range}&interval=${historyRange.interval}` : 'range=1d&interval=1m'
+        : exactRange || (historyRange ? `range=${historyRange.range}&interval=${historyRange.interval}` : 'range=1d&interval=1m')
       const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${query}`
       const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 Harcamac/1.0' } })
       if (!response.ok) return null
@@ -81,8 +86,8 @@ Deno.serve(async request => {
         marketTime: result?.meta?.regularMarketTime || null,
         points: historyRange ? timestamps.flatMap((timestamp: number, index: number) => {
           const close = closes[index]
-          return typeof close === 'number' && Number.isFinite(close) && close > 0 ? [{ timestamp, price: close }] : []
-        }) : undefined,
+          return Number(timestamp) <= Math.floor(Date.now() / 1000) && typeof close === 'number' && Number.isFinite(close) && close > 0 ? [{ timestamp, price: close }] : []
+        }).sort((left: { timestamp: number }, right: { timestamp: number }) => left.timestamp - right.timestamp) : undefined,
       }
     }))
 
