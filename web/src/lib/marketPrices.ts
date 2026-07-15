@@ -83,6 +83,14 @@ function isTodayOrLater(date: string) {
 }
 
 async function fetchWithYahoo(symbol: string) {
+  if (!import.meta.env.DEV) {
+    const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', {
+      body: { symbols: [symbol], preserveSymbols: true },
+    })
+    const quote = !error && Array.isArray(data?.quotes) ? data.quotes[0] : null
+    if (quote?.price) return { symbol, price: Number(quote.price), previousClose: quote.previousClose }
+    throw new Error(`${symbol} fiyatı alınamadı`)
+  }
   const base = import.meta.env.DEV ? '/api/yahoo' : 'https://query2.finance.yahoo.com'
   const response = await fetch(`${base}/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`)
   if (!response.ok) throw new Error(`${symbol} fiyatı alınamadı`)
@@ -95,6 +103,14 @@ async function fetchWithYahoo(symbol: string) {
 }
 
 async function fetchHistoricalWithYahoo(symbol: string, date: string) {
+  if (!import.meta.env.DEV) {
+    const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', {
+      body: { symbols: [symbol], date, preserveSymbols: true },
+    })
+    const quote = !error && Array.isArray(data?.quotes) ? data.quotes[0] : null
+    if (quote?.price) return Number(quote.price)
+    throw new Error(`${symbol} tarihsel fiyatı alınamadı`)
+  }
   if (isTodayOrLater(date)) return (await fetchWithYahoo(symbol)).price
   const targetEnd = new Date(`${date}T23:59:59+03:00`)
   const start = new Date(`${date}T00:00:00+03:00`)
@@ -159,11 +175,6 @@ export async function fetchHistoricalAssetPrice(item: AssetCatalogItem, date: st
   }
   if (item.kind === 'Hisse' || item.kind === 'Fon') {
     const symbol = marketSymbolFor(item)
-    if (!import.meta.env.DEV) {
-    const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols: [symbol], date, preserveSymbols: true } })
-      const quote = !error && Array.isArray(data?.quotes) ? data.quotes[0] : null
-      if (quote?.price) return Number(quote.price)
-    }
     try {
       return await fetchHistoricalWithYahoo(symbol, date)
     } catch {
