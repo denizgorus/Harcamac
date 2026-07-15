@@ -21,6 +21,8 @@ Deno.serve(async request => {
   try {
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     if (!resendApiKey) throw new Error('RESEND_API_KEY tanımlı değil')
+    const target = Deno.env.get('ERROR_REPORT_EMAIL')
+    if (!target) throw new Error('ERROR_REPORT_EMAIL tanımlı değil')
 
     const body = await request.json()
     const action = limitedText(body?.action, 180) || 'Bilinmeyen işlem'
@@ -28,7 +30,6 @@ Deno.serve(async request => {
     const contextRows = Object.entries(context).slice(0, 30).map(([key, value]) =>
       `<tr><td style="padding:6px 10px;color:#66736c">${escapeHtml(key)}</td><td style="padding:6px 10px;font-weight:600">${escapeHtml(value)}</td></tr>`
     ).join('')
-    const target = Deno.env.get('ERROR_REPORT_EMAIL') || 'denizgorus@hotmail.com'
     const sender = Deno.env.get('ERROR_REPORT_FROM') || 'Harcamaç <onboarding@resend.dev>'
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
