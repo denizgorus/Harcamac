@@ -300,16 +300,26 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
   const [toast, setToast] = useState<{kind:FlowKind;text:string}|null>(null)
   const [editEntry, setEditEntry] = useState<Entry | null>(null)
   const assetsRef = useRef<Asset[]>([])
+  const loadGeneration = useRef(0)
   const userId = session.user.id
 
   async function loadData() {
+    const generation = ++loadGeneration.current
     setLoading(true)
-    const [e, c, a] = await Promise.all([
+    const fetchFinancialData = () => Promise.all([
       supabase.from('entries').select('*, categories(name,color)').order('entry_date', { ascending: false }),
       supabase.from('categories').select('*').order('name'), supabase.from('assets').select('*').order('created_at', { ascending: false })
     ])
+    let [e, c, a] = await fetchFinancialData()
+    for (const retryDelay of [1500, 2500, 4000]) {
+      if (!e.error && !c.error && !a.error) break
+      await new Promise(resolve => window.setTimeout(resolve, retryDelay))
+      if (generation !== loadGeneration.current) return
+      ;[e, c, a] = await fetchFinancialData()
+    }
+    if (generation !== loadGeneration.current) return
     const loadError=e.error||c.error||a.error
-    if(loadError)showAppError('Finansal verileri yükleme',loadError,{hareketler:e.error?'başarısız':'başarılı',kategoriler:c.error?'başarısız':'başarılı',varlıklar:a.error?'başarısız':'başarılı'})
+    if(loadError){setLoading(false);showAppError('Finansal verileri yükleme',loadError,{hareketler:e.error?'başarısız':'başarılı',kategoriler:c.error?'başarısız':'başarılı',varlıklar:a.error?'başarısız':'başarılı',deneme:4});return}
     setEntries((e.data || []).map((x: any) => ({ ...x, category_name: x.categories?.name || 'Diğer', category_color: x.categories?.color || '#7b837e' })))
     let loadedCategories = (c.data || []) as Category[]
     const defaultsSeeded = session.user.user_metadata.default_categories_seeded_v1 === true
@@ -337,7 +347,7 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
     }
     setCategories(loadedCategories); setAssets((a.data || []) as Asset[]); setLoading(false)
   }
-  useEffect(() => { loadData() }, [userId])
+  useEffect(() => { void loadData(); return () => { loadGeneration.current += 1 } }, [userId])
   useEffect(() => { assetsRef.current = assets }, [assets])
   useEffect(() => {
     const channel = supabase.channel(`assets-${userId}`).on('postgres_changes', {
