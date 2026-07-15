@@ -485,7 +485,7 @@ function Assets({assets,entries,onDelete,onChanged}:{assets:Asset[];entries:Entr
   const cost = assets.reduce((sum, asset) => sum + (asset.symbol === MONTHLY_BALANCE_SYMBOL ? 0 : Number(asset.units) * Number(asset.average_cost)), 0)
   const gain = total - cost
   const gainRate = cost > 0 ? gain / cost * 100 : 0
-  const groupedAssets=Object.values(assets.reduce((acc,asset)=>{const name=asset.kind==='Döviz'?'Para':asset.kind||'Diğer';acc[name]||={name,items:[],value:0,cost:0};acc[name].items.push(asset);acc[name].value+=resolvedAssetValue(asset,monthlyBalance);acc[name].cost+=asset.symbol===MONTHLY_BALANCE_SYMBOL?0:Number(asset.units)*Number(asset.average_cost);return acc},{} as Record<string,{name:string;items:Asset[];value:number;cost:number}>)).sort((a,b)=>b.value-a.value)
+  const groupedAssets=Object.values(assets.reduce((acc,asset)=>{const name=asset.kind==='Döviz'?'Para':asset.kind==='Altın'?'Kıymetli Madenler':asset.kind||'Diğer';acc[name]||={name,items:[],value:0,cost:0};acc[name].items.push(asset);acc[name].value+=resolvedAssetValue(asset,monthlyBalance);acc[name].cost+=asset.symbol===MONTHLY_BALANCE_SYMBOL?0:Number(asset.units)*Number(asset.average_cost);return acc},{} as Record<string,{name:string;items:Asset[];value:number;cost:number}>)).sort((a,b)=>b.value-a.value)
   const watchItems=watchKeys.flatMap(key=>{const item=assetCatalog.find(candidate=>`${candidate.kind}:${candidate.symbol}`===key);return item?[item]:[]})
   const watchResults=watchQuery.trim()?assetCatalog.flatMap(item=>{if(item.kind!=='Hisse'&&item.kind!=='Fon'&&item.kind!=='Kripto'&&item.kind!=='Endeks')return [];const score=assetSearchScore(item,watchQuery);return score===null?[]:[{item,score}]}).sort((left,right)=>left.score-right.score||left.item.name.localeCompare(right.item.name,'tr')).slice(0,8).map(result=>result.item):[]
   const formatMoney=(value:number)=>hidden?'******':currency==='USD'?new Intl.NumberFormat('tr-TR',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(value/Math.max(usdTry,1)):trMoney.format(value)
@@ -631,20 +631,28 @@ type AssetDraft = {
   selected?: Pick<AssetCatalogItem, 'kind' | 'symbol' | 'exchange' | 'dataSource'>
 }
 
-function GoldBarIcon() { return <svg className="gold-bar-icon" viewBox="0 0 48 34" aria-hidden="true"><path d="M8 9 31 4 42 11 17 17Z"/><path className="gold-bar-shade" d="M17 17 42 11 38 25 14 30Z"/><path className="gold-bar-shade side" d="M8 9 17 17 14 30 5 21Z"/><path d="m14 11 17-4 5 3-18 4.5Z"/><path className="gold-bar-detail" d="m20 20 16-4M18 24l15-4"/></svg> }
+function GoldBarIcon() {
+  return <svg className="gold-bar-icon" viewBox="0 0 52 38" aria-hidden="true">
+    <path className="gold-bar-top" d="M7.5 21.5 23.7 5.8c1.8-1.8 4.1-2.2 6.4-1.1l14.1 7.1c2.1 1.1 2.5 3.2.9 5L34.3 27.2Z"/>
+    <path className="gold-bar-shade side" d="m34.3 27.2 10.8-10.4-3.5 9.4c-.6 1.7-1.8 3-3.4 3.9l-5.4 3.1Z"/>
+    <path className="gold-bar-shade" d="M7.5 21.5 34.3 27.2l-1.5 6-3.7 1.4-17.5-3.8c-4.9-1.1-6.3-5.6-4.1-9.3Z"/>
+    <path className="gold-bar-detail" d="M11 20.8 25.6 7.4c1.2-1.1 2.6-1.3 4.1-.6l12.1 6.1M9.1 24.7c.8 1.8 2.2 2.9 4.5 3.4l16.8 3.6"/>
+  </svg>
+}
 function CurrencyPairIcon() { return <span className="currency-pair-icon" aria-hidden="true"><b className="turkish-lira-symbol">₺</b><b>$</b><b>€</b></span> }
 
 function AssetModal({userId,assets,close,saved,assetsChanged}:{userId:string;assets:Asset[];close:()=>void;saved:()=>void;assetsChanged:()=>void}) {
   const kinds = [
     { name: 'Hisse', icon: TrendingUp },
-    { name: 'Altın', icon: GoldBarIcon },
+    { name: 'Kıymetli Madenler', icon: GoldBarIcon },
     { name: 'Kripto', icon: Bitcoin },
     { name: 'Fon', icon: Landmark },
     { name: 'Para', icon: CurrencyPairIcon }
   ]
   const initialDraft=useMemo<AssetDraft>(()=>{try{return JSON.parse(sessionStorage.getItem('harcamac-asset-draft')||'{}')}catch{return {}}},[])
-  const restoredSelected=initialDraft.selected?assetCatalog.find(item=>item.kind===initialDraft.selected?.kind&&item.symbol===initialDraft.selected?.symbol&&item.exchange===initialDraft.selected?.exchange&&item.dataSource===initialDraft.selected?.dataSource)||null:null
-  const initialKind=initialDraft.kind==='Döviz'?'Para':initialDraft.kind||'Hisse'
+  const restoredKind=initialDraft.selected?.kind==='Altın'?'Kıymetli Madenler':initialDraft.selected?.kind
+  const restoredSelected=initialDraft.selected?assetCatalog.find(item=>item.kind===restoredKind&&item.symbol===initialDraft.selected?.symbol&&item.exchange===initialDraft.selected?.exchange&&item.dataSource===initialDraft.selected?.dataSource)||null:null
+  const initialKind=initialDraft.kind==='Döviz'?'Para':initialDraft.kind==='Altın'?'Kıymetli Madenler':initialDraft.kind||'Hisse'
   const [step,setStep]=useState(initialDraft.step||0),[kind,setKind]=useState(initialKind),[exchange,setExchange]=useState(initialDraft.exchange??'BIST'),[query,setQuery]=useState(initialDraft.query||''),[selected,setSelected]=useState<AssetCatalogItem|null>(restoredSelected),[purchaseDate,setPurchaseDate]=useState(initialDraft.purchaseDate||today),[units,setUnits]=useState(initialDraft.units||''),[price,setPrice]=useState(initialDraft.price||''),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[monthlyBusy,setMonthlyBusy]=useState(false),[monthlyEnabled,setMonthlyEnabled]=useState(()=>assets.some(asset=>asset.symbol===MONTHLY_BALANCE_SYMBOL))
   const hasExchangeStep=kind==='Hisse'
   const steps=hasExchangeStep?['Tür','Borsa','Sembol','Alış','Adet']:['Tür','Sembol','Alış','Adet']

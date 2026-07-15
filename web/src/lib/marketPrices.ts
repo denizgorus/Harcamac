@@ -37,10 +37,14 @@ export type AssetCatalogItem = {
 export const assetCatalog: AssetCatalogItem[] = [
   ...(bistCatalog as AssetCatalogItem[]).map(item => ({ ...item, exchange: 'BIST', dataSource: 'yahoo' as const })),
   ...(tefasCatalog as AssetCatalogItem[]),
-  { kind: 'Altın', symbol: 'XAUTRYG', name: 'Gram Altın', yahooSymbol: 'GC=F', dataSource: 'yahoo' },
-  { kind: 'Altın', symbol: 'XAGTRYG', name: 'Gram Gümüş', yahooSymbol: 'SI=F', dataSource: 'yahoo' },
-  { kind: 'Altın', symbol: 'FIZIKI-XAUTRYG', name: 'Fiziki Gram Altın', yahooSymbol: 'GC=F', dataSource: 'yahoo' },
-  { kind: 'Altın', symbol: 'FIZIKI-XAGTRYG', name: 'Fiziki Gram Gümüş', yahooSymbol: 'SI=F', dataSource: 'yahoo' },
+  { kind: 'Kıymetli Madenler', symbol: 'XAUTRYG', name: 'Gram Altın', yahooSymbol: 'GC=F', dataSource: 'yahoo' },
+  { kind: 'Kıymetli Madenler', symbol: 'XAGTRYG', name: 'Gram Gümüş', yahooSymbol: 'SI=F', dataSource: 'yahoo' },
+  { kind: 'Kıymetli Madenler', symbol: 'XPTTRYG', name: 'Gram Platin', yahooSymbol: 'PL=F', dataSource: 'yahoo' },
+  { kind: 'Kıymetli Madenler', symbol: 'XPDTRYG', name: 'Gram Paladyum', yahooSymbol: 'PA=F', dataSource: 'yahoo' },
+  { kind: 'Kıymetli Madenler', symbol: 'FIZIKI-XAUTRYG', name: 'Fiziki Gram Altın', yahooSymbol: 'GC=F', dataSource: 'yahoo' },
+  { kind: 'Kıymetli Madenler', symbol: 'FIZIKI-XAGTRYG', name: 'Fiziki Gram Gümüş', yahooSymbol: 'SI=F', dataSource: 'yahoo' },
+  { kind: 'Kıymetli Madenler', symbol: 'FIZIKI-XPTTRYG', name: 'Fiziki Gram Platin', yahooSymbol: 'PL=F', dataSource: 'yahoo' },
+  { kind: 'Kıymetli Madenler', symbol: 'FIZIKI-XPDTRYG', name: 'Fiziki Gram Paladyum', yahooSymbol: 'PA=F', dataSource: 'yahoo' },
   { kind: 'Kripto', symbol: 'BTC', name: 'Bitcoin', yahooSymbol: 'BTC-USD' },
   { kind: 'Kripto', symbol: 'ETH', name: 'Ethereum', yahooSymbol: 'ETH-USD' },
   { kind: 'Kripto', symbol: 'SOL', name: 'Solana', yahooSymbol: 'SOL-USD' },
@@ -64,6 +68,10 @@ function bistYahooSymbol(symbol: string) {
   if (cleaned.endsWith('.IS')) return cleaned
   if (cleaned.includes('.')) return cleaned
   return `${cleaned}.IS`
+}
+
+function isPreciousMetalKind(kind?: string) {
+  return kind === 'Kıymetli Madenler' || kind === 'Altın'
 }
 
 function latestNumber(values: unknown[]) {
@@ -181,7 +189,7 @@ export async function fetchHistoricalAssetPrice(item: AssetCatalogItem, date: st
       return (await fetchWithYahoo(symbol)).price
     }
   }
-  if (item.kind === 'Altın') {
+  if (isPreciousMetalKind(item.kind)) {
     const metalSymbol = item.yahooSymbol || item.symbol
     let metalUsd: number
     let usdTry: number
@@ -196,7 +204,7 @@ export async function fetchHistoricalAssetPrice(item: AssetCatalogItem, date: st
       usdTry = (await fetchWithYahoo('USDTRY=X')).price
     }
     const gramsPerTroyOunce = 31.1034768
-    return item.symbol === 'XAGTRYG' ? (metalUsd * usdTry) / gramsPerTroyOunce : (metalUsd * usdTry) / gramsPerTroyOunce
+    return (metalUsd * usdTry) / gramsPerTroyOunce
   }
   if (item.kind === 'Kripto') {
     const cryptoSymbol = item.yahooSymbol || `${item.symbol}-USD`
@@ -358,7 +366,7 @@ export async function fetchAssetHistory(asset: Asset, range: MarketRange): Promi
     if (!item || item.kind !== 'Para' || item.symbol !== 'TL') {
       const symbol = item ? marketSymbolFor(item) : asset.kind === 'Hisse' ? bistYahooSymbol(asset.symbol) : asset.symbol
       let points = await fetchYahooHistory(symbol, range)
-      if (item?.kind === 'Altın') {
+      if (isPreciousMetalKind(item?.kind)) {
         const usdTry = await fetchHistoricalWithYahoo('USDTRY=X', localDay(new Date()))
         points = points.map(point => ({ ...point, price: point.price * usdTry / 31.1034768 }))
       } else if (item?.kind === 'Kripto') {
