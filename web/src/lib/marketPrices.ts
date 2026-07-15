@@ -296,7 +296,13 @@ function normalizeHistory(points: MarketHistoryPoint[], range: MarketRange) {
   source.forEach(point => byTimestamp.set(Number(point.timestamp), { timestamp: Number(point.timestamp), price: Number(point.price) }))
   const normalized = [...byTimestamp.values()].sort((left, right) => left.timestamp - right.timestamp)
   if (range !== 'Maks.' && normalized.length && normalized[0].timestamp * 1000 > start) {
-    normalized.unshift({ timestamp: Math.floor(start / 1000), price: normalized[0].price })
+    const startTimestamp = Math.floor(start / 1000)
+    const firstRealTimestamp = normalized[0].timestamp
+    const zeroUntilTimestamp = Math.max(startTimestamp, firstRealTimestamp - 1)
+    normalized.unshift(
+      { timestamp: startTimestamp, price: 0 },
+      ...zeroUntilTimestamp > startTimestamp ? [{ timestamp: zeroUntilTimestamp, price: 0 }] : [],
+    )
   }
   return normalized
 }
