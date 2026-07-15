@@ -643,10 +643,10 @@ type AssetDraft = {
 }
 
 function GoldBarIcon() {
-  return <svg className="gold-bar-icon" viewBox="0 0 52 32" aria-hidden="true">
-    <path d="M5 10.5 17.4 4.2a3 3 0 0 1 2.6-.1l27 10.2-12.3 6.3Z"/>
-    <path d="m5 10.5 29.7 10.1-.8 6.8L7.5 18A3.8 3.8 0 0 1 5 14.4Z"/>
-    <path d="m34.7 20.6 12.3-6.3.7 4.5a2.8 2.8 0 0 1-1.5 2.9l-12.3 5.7Z"/>
+  return <svg className="gold-bar-icon" viewBox="0 0 60 30" aria-hidden="true">
+    <path d="m8.5 7.5 9.8-4a4 4 0 0 1 2.8-.1l29.5 8.3a3 3 0 0 1 2 1.8l3.2 7.4a2.5 2.5 0 0 1-1.3 3.2l-6.1 3.2a4 4 0 0 1-2.8.3L6.9 17.4a2.8 2.8 0 0 1-1.8-3.3l1.7-4.7a3.2 3.2 0 0 1 1.7-1.9Z"/>
+    <path d="m7.3 9.1 37.8 9.8 6.8-6.1"/>
+    <path d="m45.1 18.9 2.7 8.5"/>
   </svg>
 }
 function CurrencyPairIcon() { return <span className="currency-pair-icon" aria-hidden="true"><b className="turkish-lira-symbol">₺</b><b>$</b><b>€</b></span> }
