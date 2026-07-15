@@ -631,7 +631,7 @@ type AssetDraft = {
   selected?: Pick<AssetCatalogItem, 'kind' | 'symbol' | 'exchange' | 'dataSource'>
 }
 
-function GoldBarIcon() { return <span className="gold-bar-icon" aria-hidden="true"><i/></span> }
+function GoldBarIcon() { return <svg className="gold-bar-icon" viewBox="0 0 48 34" aria-hidden="true"><path d="M8 9 31 4 42 11 17 17Z"/><path className="gold-bar-shade" d="M17 17 42 11 38 25 14 30Z"/><path className="gold-bar-shade side" d="M8 9 17 17 14 30 5 21Z"/><path d="m14 11 17-4 5 3-18 4.5Z"/><path className="gold-bar-detail" d="m20 20 16-4M18 24l15-4"/></svg> }
 function CurrencyPairIcon() { return <span className="currency-pair-icon" aria-hidden="true"><b className="turkish-lira-symbol">₺</b><b>$</b><b>€</b></span> }
 
 function AssetModal({userId,assets,close,saved,assetsChanged}:{userId:string;assets:Asset[];close:()=>void;saved:()=>void;assetsChanged:()=>void}) {
