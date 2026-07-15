@@ -22,13 +22,18 @@ function assetSearchScore(item:AssetCatalogItem,query:string) {
   const terms=normalizeSearch(query).split(' ').filter(Boolean)
   if(!terms.length)return 0
   const words=normalizeSearch(`${item.symbol} ${item.name}`).split(' ').filter(Boolean)
+  const usedWords=new Set<number>()
   let score=0
   for(const term of terms){
-    const exact=words.findIndex(word=>word===term)
-    const prefix=exact<0?words.findIndex(word=>word.startsWith(term)):-1
-    const partial=exact<0&&prefix<0?words.findIndex(word=>word.includes(term)):-1
-    if(exact<0&&prefix<0&&partial<0)return null
-    score+=exact>=0?exact:prefix>=0?20+prefix:40+partial
+    const available=(word:string,index:number)=>!usedWords.has(index)&&word===term
+    const exact=words.findIndex(available)
+    const symbolPrefix=exact<0&&!usedWords.has(0)&&words[0]?.startsWith(term)?0:-1
+    const prefix=exact<0&&symbolPrefix<0&&term.length>=3?words.findIndex((word,index)=>!usedWords.has(index)&&word.startsWith(term)):-1
+    const partial=exact<0&&symbolPrefix<0&&prefix<0&&term.length>=3?words.findIndex((word,index)=>!usedWords.has(index)&&word.includes(term)):-1
+    if(exact<0&&symbolPrefix<0&&prefix<0&&partial<0)return null
+    const matched=exact>=0?exact:symbolPrefix>=0?symbolPrefix:prefix>=0?prefix:partial
+    usedWords.add(matched)
+    score+=exact>=0?exact:symbolPrefix>=0?10:prefix>=0?20+prefix:40+partial
   }
   if(normalizeSearch(item.symbol)===terms.join(''))score-=1000
   return score
