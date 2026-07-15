@@ -10,6 +10,9 @@ export type MarketPrice = {
   previousClose?: number
 }
 
+export type MarketRange = '1G' | '1H' | '1A' | '3A' | '6A' | '1Y' | '5Y'
+export type MarketHistoryPoint = { timestamp: number; price: number }
+
 export type AssetCatalogItem = {
   kind: string
   symbol: string
@@ -30,11 +33,12 @@ export const assetCatalog: AssetCatalogItem[] = [
   { kind: 'Kripto', symbol: 'BTC', name: 'Bitcoin', yahooSymbol: 'BTC-USD' },
   { kind: 'Kripto', symbol: 'ETH', name: 'Ethereum', yahooSymbol: 'ETH-USD' },
   { kind: 'Kripto', symbol: 'SOL', name: 'Solana', yahooSymbol: 'SOL-USD' },
-  { kind: 'Döviz', symbol: 'USD', name: 'Amerikan Doları', yahooSymbol: 'USDTRY=X', dataSource: 'yahoo' },
-  { kind: 'Döviz', symbol: 'EUR', name: 'Euro', yahooSymbol: 'EURTRY=X', dataSource: 'yahoo' },
-  { kind: 'Döviz', symbol: 'GBP', name: 'İngiliz Sterlini', yahooSymbol: 'GBPTRY=X', dataSource: 'yahoo' },
-  { kind: 'Döviz', symbol: 'CHF', name: 'İsviçre Frangı', yahooSymbol: 'CHFTRY=X', dataSource: 'yahoo' },
-  { kind: 'Döviz', symbol: 'JPY', name: 'Japon Yeni', yahooSymbol: 'JPYTRY=X', dataSource: 'yahoo' },
+  { kind: 'Para', symbol: 'TL', name: 'Türk Lirası' },
+  { kind: 'Para', symbol: 'USD', name: 'Amerikan Doları', yahooSymbol: 'USDTRY=X', dataSource: 'yahoo' },
+  { kind: 'Para', symbol: 'EUR', name: 'Euro', yahooSymbol: 'EURTRY=X', dataSource: 'yahoo' },
+  { kind: 'Para', symbol: 'GBP', name: 'İngiliz Sterlini', yahooSymbol: 'GBPTRY=X', dataSource: 'yahoo' },
+  { kind: 'Para', symbol: 'CHF', name: 'İsviçre Frangı', yahooSymbol: 'CHFTRY=X', dataSource: 'yahoo' },
+  { kind: 'Para', symbol: 'JPY', name: 'Japon Yeni', yahooSymbol: 'JPYTRY=X', dataSource: 'yahoo' },
 ]
 
 function bistYahooSymbol(symbol: string) {
@@ -112,7 +116,7 @@ async function fetchHistoricalWithTefas(symbol: string, date: string) {
   const response = await fetch('/api/tefas/api/funds/fonFiyatBilgiGetir', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ fonKodu: symbol, dil: 'TR', periyod: tefasPeriod(date) }),
+    body: JSON.stringify({ fonKodu: symbol, dil: 'TR', periyod: String(tefasPeriod(date)) }),
   })
   if (!response.ok) throw new Error(`${symbol} TEFAS fiyatı alınamadı`)
   const payload = await response.json()
@@ -182,7 +186,7 @@ export async function fetchHistoricalAssetPrice(item: AssetCatalogItem, date: st
     }
     return cryptoUsd * usdTry
   }
-  if (item.kind === 'Döviz') return fetchHistoricalWithYahoo(item.yahooSymbol || `${item.symbol}TRY=X`, date)
+  if (item.kind === 'Para') return item.symbol === 'TL' || item.symbol === 'TRY' ? 1 : fetchHistoricalWithYahoo(item.yahooSymbol || `${item.symbol}TRY=X`, date)
   return null
 }
 
@@ -222,4 +226,49 @@ export async function fetchBistPrices(assets: Asset[]): Promise<MarketPrice[]> {
   })))
   const tefasQuotes = tefasResults.flatMap(result => result.status === 'fulfilled' && result.value.price ? [result.value as MarketPrice] : [])
   return [...bistQuotes, ...tefasQuotes]
+}
+
+const rangeDays: Record<MarketRange, number> = { '1G': 1, '1H': 7, '1A': 30, '3A': 90, '6A': 180, '1Y': 365, '5Y': 1825 }
+
+function fallbackHistory(asset: Asset, range: MarketRange): MarketHistoryPoint[] {
+  const points = range === '1G' ? 36 : range === '1H' ? 42 : 48
+  const end = Date.now()
+  const start = end - rangeDays[range] * 86400000
+  const from = Math.max(0.0001, Number(asset.average_cost) || Number(asset.current_price) || 1)
+  const to = Math.max(0.0001, Number(asset.current_price) || from)
+  return Array.from({ length: points }, (_, index) => {
+    const progress = index / (points - 1)
+    const wave = Math.sin(index * 1.73) * 0.012 + Math.sin(index * 0.47) * 0.008
+    return { timestamp: Math.round((start + (end - start) * progress) / 1000), price: Math.max(0.0001, from + (to - from) * progress) * (1 + wave) }
+  })
+}
+
+export async function fetchAssetHistory(asset: Asset, range: MarketRange): Promise<MarketHistoryPoint[]> {
+  if (asset.kind === 'Hisse' && asset.symbol.trim()) {
+    const symbol = bistYahooSymbol(asset.symbol)
+    try {
+      if (!import.meta.env.DEV) {
+        const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols: [symbol], range } })
+        const points = !error && Array.isArray(data?.quotes?.[0]?.points) ? data.quotes[0].points : []
+        if (points.length > 1) return points as MarketHistoryPoint[]
+      } else {
+        const ranges: Record<MarketRange, { range: string; interval: string }> = {
+          '1G': { range: '1d', interval: '5m' }, '1H': { range: '5d', interval: '30m' },
+          '1A': { range: '1mo', interval: '1d' }, '3A': { range: '3mo', interval: '1d' },
+          '6A': { range: '6mo', interval: '1d' }, '1Y': { range: '1y', interval: '1wk' }, '5Y': { range: '5y', interval: '1mo' },
+        }
+        const selection = ranges[range]
+        const response = await fetch(`/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?range=${selection.range}&interval=${selection.interval}`)
+        if (response.ok) {
+          const payload = await response.json()
+          const result = payload?.chart?.result?.[0]
+          const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : []
+          const closes = Array.isArray(result?.indicators?.quote?.[0]?.close) ? result.indicators.quote[0].close : []
+          const points = timestamps.flatMap((timestamp: number, index: number) => typeof closes[index] === 'number' ? [{ timestamp, price: closes[index] }] : [])
+          if (points.length > 1) return points
+        }
+      }
+    } catch { /* Fall back to the position curve when the provider is unavailable. */ }
+  }
+  return fallbackHistory(asset, range)
 }

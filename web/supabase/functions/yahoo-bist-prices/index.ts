@@ -42,11 +42,18 @@ Deno.serve(async request => {
     const symbols = Array.isArray(body?.symbols) ? body.symbols.map(String) : []
     const dateRange = unixDayRange(typeof body?.date === 'string' ? body.date : undefined)
     const uniqueSymbols = [...new Set(symbols.map(yahooSymbol).filter(Boolean))]
+    const ranges: Record<string, { range: string; interval: string }> = {
+      '1G': { range: '1d', interval: '5m' }, '1H': { range: '5d', interval: '30m' },
+      '1A': { range: '1mo', interval: '1d' }, '3A': { range: '3mo', interval: '1d' },
+      '6A': { range: '6mo', interval: '1d' }, '1Y': { range: '1y', interval: '1wk' },
+      '5Y': { range: '5y', interval: '1mo' },
+    }
+    const historyRange = typeof body?.range === 'string' ? ranges[body.range] : null
 
     const quotes = await Promise.all(uniqueSymbols.map(async symbol => {
       const query = dateRange
         ? `period1=${dateRange.period1}&period2=${dateRange.period2}&interval=1d`
-        : 'range=1d&interval=1m'
+        : historyRange ? `range=${historyRange.range}&interval=${historyRange.interval}` : 'range=1d&interval=1m'
       const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${query}`
       const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 Harcamac/1.0' } })
       if (!response.ok) return null
@@ -72,6 +79,10 @@ Deno.serve(async request => {
         previousClose: result?.meta?.chartPreviousClose || result?.meta?.previousClose,
         currency: result?.meta?.currency || 'TRY',
         marketTime: result?.meta?.regularMarketTime || null,
+        points: historyRange ? timestamps.flatMap((timestamp: number, index: number) => {
+          const close = closes[index]
+          return typeof close === 'number' && Number.isFinite(close) && close > 0 ? [{ timestamp, price: close }] : []
+        }) : undefined,
       }
     }))
 

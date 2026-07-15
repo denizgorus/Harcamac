@@ -27,7 +27,7 @@ Deno.serve(async request => {
         Accept: 'application/json',
         'User-Agent': 'Mozilla/5.0 Harcamac/1.0',
       },
-      body: JSON.stringify({ fonKodu: symbol, dil: 'TR', periyod: periodFor(date) }),
+      body: JSON.stringify({ fonKodu: symbol, dil: 'TR', periyod: String(periodFor(date)) }),
     })
     if (!response.ok) throw new Error('TEFAS fiyatı alınamadı')
     const payload = await response.json()

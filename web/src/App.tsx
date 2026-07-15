@@ -2,15 +2,28 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDownUp, BarChart3, Bitcoin, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, Gem, HelpCircle, KeyRound, Landmark, LayoutDashboard, LogOut, Menu, Moon, Pencil, PieChart as PieIcon, Plus, Search, Settings, Sun, Tags, Trash2, TrendingUp, WalletCards, X } from 'lucide-react'
+import { ArrowDownUp, ArrowLeft, BarChart3, Bitcoin, Bookmark, BookmarkCheck, CalendarDays, ChartNoAxesCombined, ChevronLeft, ChevronRight, CircleDollarSign, Eye, EyeOff, HelpCircle, KeyRound, Landmark, LayoutDashboard, ListPlus, LogOut, Menu, Moon, Pencil, PieChart as PieIcon, Plus, Search, Settings, Sun, Tags, Trash2, TrendingUp, WalletCards, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { AssetCatalogItem, assetCatalog, fetchBistPrices, fetchHistoricalAssetPrice } from './lib/marketPrices'
+import { AssetCatalogItem, MarketRange, assetCatalog, fetchAssetHistory, fetchBistPrices, fetchHistoricalAssetPrice } from './lib/marketPrices'
 import { Asset, Cadence, Category, defaultCategories, Entry, FlowKind } from './types'
 
 type Page = 'dashboard' | 'transactions' | 'recurring' | 'assets' | 'settings'
 const trMoney = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 2 })
 const trMonth = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' })
 const today = new Date().toISOString().slice(0, 10)
+const MONTHLY_BALANCE_SYMBOL = 'AYLIK-DENGE'
+
+function currentMonthlyBalance(entries: Entry[]) {
+  const now = new Date()
+  return entries.filter(entry => {
+    const date = new Date(`${entry.entry_date}T12:00:00`)
+    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+  }).reduce((sum, entry) => sum + (entry.kind === 'income' ? Number(entry.amount) : -Number(entry.amount)), 0)
+}
+
+function resolvedAssetValue(asset: Asset, monthlyBalance: number) {
+  return asset.symbol === MONTHLY_BALANCE_SYMBOL ? monthlyBalance : Number(asset.units) * Number(asset.current_price)
+}
 const nav = [
   { id: 'dashboard' as Page, label: 'Özet', icon: LayoutDashboard }, { id: 'transactions' as Page, label: 'Hareketler', icon: ArrowDownUp },
   { id: 'recurring' as Page, label: 'Düzenli', icon: CalendarDays }, { id: 'assets' as Page, label: 'Varlıklar', icon: WalletCards },
@@ -126,6 +139,7 @@ function authMessage(error: { code?: string; message?: string } | null) {
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(false)
+  const [splashDone, setSplashDone] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'light')
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true) })
@@ -133,10 +147,13 @@ export default function App() {
     return () => data.subscription.unsubscribe()
   }, [])
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('theme', theme) }, [theme])
-  if (!authReady) return <div className="splash"><div className="brand-mark">₺</div><b>Harcamaç</b></div>
+  useEffect(() => { const timer = window.setTimeout(() => setSplashDone(true), 1250); return () => window.clearTimeout(timer) }, [])
+  if (!authReady || !splashDone) return <AppSplash />
   if (!session) return <Auth theme={theme} setTheme={setTheme} />
   return <FinanceApp session={session} theme={theme} setTheme={setTheme} />
 }
+
+function AppSplash() { return <div className="app-splash"><div className="splash-orbit"><span className="brand-mark">₺</span></div><b>Harcamaç</b><small>Finansal görünümün hazırlanıyor</small></div> }
 
 function TypingText({ text }: { text: string }) {
   const [visibleText, setVisibleText] = useState('')
@@ -345,13 +362,13 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
         {page === 'dashboard' && <Dashboard entries={entries} assets={assets} />}
         {page === 'transactions' && <Transactions entries={entries} categories={categories} onEdit={e => { setEditEntry(e); setEntryOpen(true) }} onDelete={async id => { await supabase.from('entries').delete().eq('id', id); loadData() }} />}
         {page === 'recurring' && <Recurring entries={entries} onEdit={e => { setEditEntry(e); setEntryOpen(true) }} />}
-        {page === 'assets' && <Assets assets={assets} onDelete={async id => { await supabase.from('assets').delete().eq('id', id); loadData() }} />}
+        {page === 'assets' && <Assets assets={assets} entries={entries} onDelete={async id => { await supabase.from('assets').delete().eq('id', id); loadData() }} />}
         {page === 'settings' && <SettingsPage theme={theme} setTheme={setTheme} email={session.user.email || ''} catAlerts={catAlerts} setCatAlerts={setCatAlerts} openCategories={() => setCategoryOpen(true)} openGuide={() => setGuideOpen(true)} />}
       </>}
     </main>
     <nav className="bottom-nav" data-tour="navigation">{nav.map(item => <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => setPage(item.id)}><item.icon/><span>{item.label}</span></button>)}</nav>
     {entryOpen && <EntryModal userId={userId} categories={categories} entry={editEntry} close={() => setEntryOpen(false)} saved={entrySaved} onCategoryAdded={category => setCategories(items => [...items, category].sort((left, right) => left.name.localeCompare(right.name, 'tr')))} />}
-    {assetOpen && <AssetModal userId={userId} close={() => setAssetOpen(false)} saved={() => { setAssetOpen(false); loadData() }} />}
+    {assetOpen && <AssetModal userId={userId} assets={assets} close={() => setAssetOpen(false)} saved={() => { setAssetOpen(false); loadData() }} assetsChanged={loadData} />}
     {categoryOpen && <CategoryModal userId={userId} categories={categories} close={() => setCategoryOpen(false)} reload={loadData} />}
     {setupOpen && <SetupModal userId={userId} close={() => setSetupOpen(false)} saved={() => { setSetupOpen(false); loadData() }} />}
     {guideOpen && <GuideModal goTo={setPage} showCategories={() => setCategoryOpen(true)} hideCategories={() => setCategoryOpen(false)} close={() => { setGuideOpen(false); setCategoryOpen(false) }} />}
@@ -363,7 +380,8 @@ function Dashboard({ entries, assets }: { entries: Entry[]; assets: Asset[] }) {
   const now = new Date(), current = entries.filter(e => { const d = new Date(e.entry_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() })
   const income = current.filter(e => e.kind === 'income').reduce((s,e) => s + Number(e.amount), 0)
   const expense = current.filter(e => e.kind === 'expense').reduce((s,e) => s + Number(e.amount), 0)
-  const assetTotal = assets.reduce((s,a) => s + Number(a.units) * Number(a.current_price), 0)
+  const monthlyBalance = income - expense
+  const assetTotal = assets.reduce((sum, asset) => sum + resolvedAssetValue(asset, monthlyBalance), 0)
   return <div className="page-content">
     <section className="metric-grid"><Metric label="Bu ay gelir" value={income} tone="green"/><Metric label="Bu ay gider" value={expense} tone="red"/><Metric label="Aylık denge" value={income-expense} tone="ink"/><Metric label="Toplam varlık" value={assetTotal} tone="blue"/></section>
     <section className="chart-grid">{defaultWidgets.map(widget=><article className="panel chart-card" data-tour={widget.id==='flow'?'charts':undefined} key={widget.id}><ChartHeader widget={widget}/><ChartBody widget={widget} entries={entries}/></article>)}
@@ -396,48 +414,77 @@ function EntryRows({entries,actions}:{entries:Entry[];actions?:{onEdit:(e:Entry)
 
 function Recurring({entries,onEdit}:{entries:Entry[];onEdit:(e:Entry)=>void}) { const list=entries.filter(e=>e.cadence==='recurring'); const inc=list.filter(e=>e.kind==='income').reduce((s,e)=>s+Number(e.amount),0), exp=list.filter(e=>e.kind==='expense').reduce((s,e)=>s+Number(e.amount),0); return <div className="page-content"><section className="metric-grid two"><Metric label="Düzenli gelir" value={inc} tone="green"/><Metric label="Düzenli gider" value={exp} tone="red"/></section><section className="panel"><PanelTitle title="Düzenli hareketler" subtitle="Aylık planınız"/><EntryRows entries={list} actions={{onEdit,onDelete:()=>{}}}/></section></div> }
 
-function Assets({assets,onDelete}:{assets:Asset[];onDelete:(id:string)=>void}) {
-  const total = assets.reduce((sum, asset) => sum + Number(asset.units) * Number(asset.current_price), 0)
-  const cost = assets.reduce((sum, asset) => sum + Number(asset.units) * Number(asset.average_cost), 0)
+const assetRanges: MarketRange[] = ['1G','1H','1A','3A','6A','1Y','5Y']
+const assetRangeDays: Record<MarketRange,number> = {'1G':1,'1H':7,'1A':30,'3A':90,'6A':180,'1Y':365,'5Y':1825}
+
+function Assets({assets,entries,onDelete}:{assets:Asset[];entries:Entry[];onDelete:(id:string)=>void}) {
+  const monthlyBalance = currentMonthlyBalance(entries)
+  const [view,setView]=useState<'portfolio'|'performance'|'watchlist'>('portfolio')
+  const [range,setRange]=useState<MarketRange>('1A')
+  const [analysisMode,setAnalysisMode]=useState<'performance'|'flow'>('performance')
+  const [hidden,setHidden]=useState(()=>localStorage.getItem('asset-balance-hidden')==='true')
+  const [currency,setCurrency]=useState<'TRY'|'USD'>(()=>localStorage.getItem('asset-currency')==='USD'?'USD':'TRY')
+  const [usdTry,setUsdTry]=useState(1)
+  const [detail,setDetail]=useState<Asset|null>(null)
+  const [watchQuery,setWatchQuery]=useState('')
+  const [watchKeys,setWatchKeys]=useState<string[]>(()=>{try{return JSON.parse(localStorage.getItem('asset-watchlist')||'[]')}catch{return []}})
+  const [watchPrices,setWatchPrices]=useState<Record<string,number>>({})
+  const total = assets.reduce((sum, asset) => sum + resolvedAssetValue(asset, monthlyBalance), 0)
+  const cost = assets.reduce((sum, asset) => sum + (asset.symbol === MONTHLY_BALANCE_SYMBOL ? 0 : Number(asset.units) * Number(asset.average_cost)), 0)
   const gain = total - cost
   const gainRate = cost > 0 ? gain / cost * 100 : 0
-  const groups = Object.values(assets.reduce((acc, asset) => {
-    const key = asset.kind || 'Diğer'
-    acc[key] ||= { name: key, value: 0 }
-    acc[key].value += Number(asset.units) * Number(asset.current_price)
-    return acc
-  }, {} as Record<string,{name:string;value:number}>)).sort((a,b)=>b.value-a.value)
-  return <div className="page-content assets-page">
+  const groupedAssets=Object.values(assets.reduce((acc,asset)=>{const name=asset.kind==='Döviz'?'Para':asset.kind||'Diğer';acc[name]||={name,items:[],value:0,cost:0};acc[name].items.push(asset);acc[name].value+=resolvedAssetValue(asset,monthlyBalance);acc[name].cost+=asset.symbol===MONTHLY_BALANCE_SYMBOL?0:Number(asset.units)*Number(asset.average_cost);return acc},{} as Record<string,{name:string;items:Asset[];value:number;cost:number}>)).sort((a,b)=>b.value-a.value)
+  const watchItems=watchKeys.flatMap(key=>{const item=assetCatalog.find(candidate=>`${candidate.kind}:${candidate.symbol}`===key);return item?[item]:[]})
+  const watchResults=watchQuery.trim()?assetCatalog.filter(item=>item.kind==='Hisse'&&(item.symbol.toLocaleLowerCase('tr').includes(watchQuery.toLocaleLowerCase('tr'))||item.name.toLocaleLowerCase('tr').includes(watchQuery.toLocaleLowerCase('tr')))).slice(0,6):[]
+  const formatMoney=(value:number)=>hidden?'••••••':currency==='USD'?new Intl.NumberFormat('tr-TR',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(value/Math.max(usdTry,1)):trMoney.format(value)
+  const performanceData=useMemo(()=>{const points=range==='1G'?32:48,end=Date.now(),start=end-assetRangeDays[range]*86400000;return Array.from({length:points},(_,index)=>{const progress=index/(points-1),timestamp=start+(end-start)*progress;let value=0;for(const asset of assets){const purchase=asset.purchase_date?new Date(`${asset.purchase_date}T12:00:00`).getTime():start;if(timestamp<purchase)continue;const assetCost=Number(asset.units)*Number(asset.average_cost),assetNow=resolvedAssetValue(asset,monthlyBalance),assetProgress=Math.min(1,Math.max(0,(timestamp-purchase)/Math.max(1,end-purchase)));value+=analysisMode==='flow'?assetCost:assetCost+(assetNow-assetCost)*assetProgress*(1+Math.sin(index*.8)*.012)}return {label:new Date(timestamp).toLocaleDateString('tr-TR',{day:'numeric',month:'short'}),value}})},[assets,monthlyBalance,range,analysisMode])
+  useEffect(()=>{localStorage.setItem('asset-balance-hidden',String(hidden))},[hidden])
+  useEffect(()=>{localStorage.setItem('asset-currency',currency)},[currency])
+  useEffect(()=>{localStorage.setItem('asset-watchlist',JSON.stringify(watchKeys))},[watchKeys])
+  useEffect(()=>{const usd=assetCatalog.find(item=>item.kind==='Para'&&item.symbol==='USD');if(usd)fetchHistoricalAssetPrice(usd,today).then(value=>value&&setUsdTry(value)).catch(()=>{})},[])
+  useEffect(()=>{let cancelled=false;Promise.allSettled(watchItems.map(async item=>({key:`${item.kind}:${item.symbol}`,price:await fetchHistoricalAssetPrice(item,today)}))).then(results=>{if(cancelled)return;setWatchPrices(Object.fromEntries(results.flatMap(result=>result.status==='fulfilled'&&result.value.price?[[result.value.key,result.value.price]]:[])))});return()=>{cancelled=true}},[watchKeys.join('|')])
+  function toggleWatch(item:AssetCatalogItem){const key=`${item.kind}:${item.symbol}`;setWatchKeys(keys=>keys.includes(key)?keys.filter(value=>value!==key):[...keys,key])}
+  function openWatch(item:AssetCatalogItem){const price=watchPrices[`${item.kind}:${item.symbol}`]||0;setDetail({id:`watch-${item.symbol}`,user_id:'',name:item.name,symbol:item.symbol,kind:item.kind,units:1,average_cost:price,current_price:price})}
+  return <div className="page-content assets-page midas-assets">
     <section className="assets-portfolio">
-      <small>Toplam Varlığım</small>
-      <strong>{trMoney.format(total)}</strong>
-      <div className={`portfolio-change ${gain >= 0 ? 'positive' : 'negative'}`}><span>{gain >= 0 ? '+' : ''}{trMoney.format(gain)}</span><b>{gainRate.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%</b></div>
-      <div className="portfolio-meta"><span>Maliyet <b>{trMoney.format(cost)}</b></span><span>{assets.length.toLocaleString('tr-TR')} varlık</span></div>
-      {groups.length > 0 && <div className="portfolio-strip">{groups.map((group,index)=><i key={group.name} className={`type-${index % 6}`} style={{width:`${Math.max(5, total ? group.value / total * 100 : 0)}%`}} title={group.name}/>)}</div>}
+      <div className="portfolio-head"><small>Toplam Varlığım</small><div><button className="icon-button subtle" title={hidden?'Bakiyeyi göster':'Bakiyeyi gizle'} onClick={()=>setHidden(value=>!value)}>{hidden?<EyeOff/>:<Eye/>}</button><div className="currency-toggle"><button className={currency==='TRY'?'active':''} onClick={()=>setCurrency('TRY')}>₺</button><button className={currency==='USD'?'active':''} onClick={()=>setCurrency('USD')}>$</button></div></div></div>
+      <strong>{formatMoney(total)}</strong>
+      <div className={`portfolio-change ${gain >= 0 ? 'positive' : 'negative'}`}><span>{hidden?'••••':`${gain>=0?'+':''}${formatMoney(gain)}`}</span><b>{hidden?'••':gainRate.toLocaleString('tr-TR',{maximumFractionDigits:2})}%</b></div>
+      <div className="portfolio-meta"><span>Maliyet <b>{formatMoney(cost)}</b></span><span>{currency==='USD'&&usdTry>1?`1 USD = ${trMoney.format(usdTry)}`:`${assets.length.toLocaleString('tr-TR')} varlık`}</span></div>
+      {groupedAssets.length>0&&<div className="portfolio-strip">{groupedAssets.map((group,index)=><i key={group.name} className={`type-${index%6}`} style={{width:`${Math.max(4,total?Math.max(0,group.value)/Math.max(total,1)*100:0)}%`}} title={group.name}/>)}</div>}
     </section>
-    <section className="assets-market">
-      <header><div><h2>Varlıklarım</h2><p>BIST hisse fiyatları Yahoo Finance üzerinden 15 dakika gecikmeli güncellenir.</p></div></header>
-      {assets.length ? <div className="asset-list">{assets.map(asset => <AssetRow key={asset.id} asset={asset} total={total} onDelete={onDelete}/>)}</div> : <Empty text="Henüz varlık eklenmedi."/>}
-    </section>
-    <section className="asset-chips">
-      {groups.map((group,index)=><div key={group.name}><span className={`asset-type type-${index % 6}`}>{group.name.slice(0,2).toLocaleUpperCase('tr')}</span><b>{group.name}</b><small>{total ? Math.round(group.value / total * 100) : 0}%</small></div>)}
-    </section>
+    <nav className="asset-view-tabs"><button className={view==='portfolio'?'active':''} onClick={()=>setView('portfolio')}><WalletCards/>Portföy</button><button className={view==='performance'?'active':''} onClick={()=>setView('performance')}><ChartNoAxesCombined/>Performans</button><button className={view==='watchlist'?'active':''} onClick={()=>setView('watchlist')}><ListPlus/>Takip</button></nav>
+    {view==='portfolio'&&<div className="asset-groups">{groupedAssets.length?groupedAssets.map(group=>{const groupGain=group.value-group.cost;return <section className="assets-market asset-group" key={group.name}><header><div><h2>{group.name}</h2><p>{group.items.length} varlık</p></div><div className="group-summary"><b>{formatMoney(group.value)}</b><small className={groupGain>=0?'positive':'negative'}>{groupGain>=0?'+':''}{formatMoney(groupGain)}</small></div></header><div className="asset-list">{group.items.map(asset=><AssetRow key={asset.id} asset={asset} total={total} monthlyBalance={monthlyBalance} formatMoney={formatMoney} onOpen={()=>setDetail(asset)} onDelete={onDelete}/>)}</div></section>}):<Empty text="Henüz varlık eklenmedi."/>}<p className="market-delay">BIST hisse fiyatları Yahoo Finance üzerinden 15 dakika gecikmeli güncellenir.</p></div>}
+    {view==='performance'&&<section className="portfolio-analysis panel"><header><div><small>{analysisMode==='performance'?'Değişim':'Toplam varlık akışı'}</small><strong>{formatMoney(analysisMode==='performance'?gain:total)}</strong><span className={gain>=0?'positive':'negative'}>{gainRate.toLocaleString('tr-TR',{maximumFractionDigits:2})}%</span></div><div className="analysis-mode"><button className={analysisMode==='performance'?'active':''} onClick={()=>setAnalysisMode('performance')}>Performans</button><button className={analysisMode==='flow'?'active':''} onClick={()=>setAnalysisMode('flow')}>Varlık akışı</button></div></header><div className="portfolio-chart"><ResponsiveContainer><AreaChart data={performanceData}><defs><linearGradient id="portfolioFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#3d8b68" stopOpacity=".28"/><stop offset="1" stopColor="#3d8b68" stopOpacity="0"/></linearGradient></defs><XAxis dataKey="label" hide/><YAxis hide domain={['dataMin','dataMax']}/><Tooltip formatter={(value:number)=>formatMoney(value)} labelStyle={{color:'#69736d'}}/><Area type="monotone" dataKey="value" stroke="#3d8b68" strokeWidth={2.4} fill="url(#portfolioFill)" dot={false}/></AreaChart></ResponsiveContainer></div><RangeTabs value={range} onChange={setRange}/><div className="analysis-stats"><span>Maliyet<b>{formatMoney(cost)}</b></span><span>Güncel değer<b>{formatMoney(total)}</b></span><span>Toplam getiri<b className={gain>=0?'positive':'negative'}>{formatMoney(gain)}</b></span></div></section>}
+    {view==='watchlist'&&<section className="watchlist-panel panel"><header><div><h2>Takip Ettiklerim</h2><p>{watchItems.length} varlık</p></div></header><label className="search watch-search"><Search/><input placeholder="BIST hissesi ara" value={watchQuery} onChange={event=>setWatchQuery(event.target.value)}/></label>{watchResults.length>0&&<div className="watch-search-results">{watchResults.map(item=>{const watched=watchKeys.includes(`${item.kind}:${item.symbol}`);return <button key={item.symbol} onClick={()=>toggleWatch(item)}><span><b>{item.symbol}</b><small>{item.name}</small></span>{watched?<BookmarkCheck/>:<Bookmark/>}</button>})}</div>}<div className="watch-list">{watchItems.map(item=>{const key=`${item.kind}:${item.symbol}`,price=watchPrices[key];return <button key={key} onClick={()=>openWatch(item)}><span className="asset-symbol"><b>{item.symbol.slice(0,3)}</b></span><span><b>{item.symbol}</b><small>{item.name}</small></span><span><b>{price?formatMoney(price):'—'}</b><small className="positive">Takipte</small></span><BookmarkCheck onClick={event=>{event.stopPropagation();toggleWatch(item)}}/></button>})}{!watchItems.length&&<Empty text="Arama yaparak takip listene hisse ekleyebilirsin."/>}</div></section>}
+    {detail&&<AssetDetail asset={detail} monthlyBalance={monthlyBalance} formatMoney={formatMoney} watched={watchKeys.includes(`${detail.kind}:${detail.symbol}`)} close={()=>setDetail(null)} toggleWatch={()=>{const item=assetCatalog.find(candidate=>candidate.kind===detail.kind&&candidate.symbol===detail.symbol);if(item)toggleWatch(item)}}/>}
   </div>
 }
 
-function AssetRow({asset,total,onDelete}:{asset:Asset;total:number;onDelete:(id:string)=>void}) {
-  const value = Number(asset.units) * Number(asset.current_price)
-  const cost = Number(asset.units) * Number(asset.average_cost)
+function RangeTabs({value,onChange}:{value:MarketRange;onChange:(range:MarketRange)=>void}) { return <div className="asset-range-tabs">{assetRanges.map(range=><button key={range} className={value===range?'active':''} onClick={()=>onChange(range)}>{range}</button>)}</div> }
+
+function AssetRow({asset,total,monthlyBalance,formatMoney,onOpen,onDelete}:{asset:Asset;total:number;monthlyBalance:number;formatMoney:(value:number)=>string;onOpen:()=>void;onDelete:(id:string)=>void}) {
+  const isMonthlyBalance = asset.symbol === MONTHLY_BALANCE_SYMBOL
+  const value = resolvedAssetValue(asset, monthlyBalance)
+  const cost = isMonthlyBalance ? 0 : Number(asset.units) * Number(asset.average_cost)
   const gain = value - cost
   const rate = cost > 0 ? gain / cost * 100 : 0
   const share = total > 0 ? value / total * 100 : 0
-  return <div className="asset-row">
+  return <div className="asset-row clickable" onClick={onOpen}>
     <div className="asset-symbol"><b>{(asset.symbol || asset.name).slice(0,3).toLocaleUpperCase('tr')}</b><small>{asset.kind}</small></div>
-    <div className="asset-main"><b>{asset.name}</b><span>{Number(asset.units).toLocaleString('tr-TR')} adet · {share.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}% portföy</span></div>
-    <div className="asset-value"><b>{trMoney.format(value)}</b><span>Ort. {trMoney.format(Number(asset.average_cost))}</span></div>
-    <div className={`asset-gain ${gain >= 0 ? 'positive' : 'negative'}`}><b>{gain >= 0 ? '+' : ''}{trMoney.format(gain)}</b><span>{rate.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%</span></div>
-    <button className="icon-button subtle danger" title="Varlığı sil" onClick={()=>confirm('Bu varlık silinsin mi?')&&onDelete(asset.id)}><Trash2/></button>
+    <div className="asset-main"><b>{asset.name}</b><span>{isMonthlyBalance ? 'Bu ayın gelir - gider farkı' : `${Number(asset.units).toLocaleString('tr-TR')} adet`} · {share.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}% portföy</span></div>
+    <div className="asset-value"><b>{formatMoney(value)}</b><span>{isMonthlyBalance ? 'Otomatik hesaplanır' : `Ort. ${formatMoney(Number(asset.average_cost))}`}</span></div>
+    <div className={`asset-gain ${gain >= 0 ? 'positive' : 'negative'}`}><b>{gain >= 0 ? '+' : ''}{formatMoney(gain)}</b><span>{isMonthlyBalance ? 'Bu ay' : `${rate.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`}</span></div>
+    <button className="icon-button subtle danger" title="Varlığı sil" onClick={event=>{event.stopPropagation();if(confirm('Bu varlık silinsin mi?'))onDelete(asset.id)}}><Trash2/></button>
   </div>
+}
+
+function AssetDetail({asset,monthlyBalance,formatMoney,watched,close,toggleWatch}:{asset:Asset;monthlyBalance:number;formatMoney:(value:number)=>string;watched:boolean;close:()=>void;toggleWatch:()=>void}) {
+  const [range,setRange]=useState<MarketRange>('1A'),[points,setPoints]=useState<{label:string;price:number;value:number}[]>([]),[loading,setLoading]=useState(true)
+  const value=resolvedAssetValue(asset,monthlyBalance),cost=asset.symbol===MONTHLY_BALANCE_SYMBOL?0:Number(asset.units)*Number(asset.average_cost),gain=value-cost,rate=cost>0?gain/cost*100:0
+  useEffect(()=>{let cancelled=false;setLoading(true);fetchAssetHistory(asset,range).then(history=>{if(!cancelled)setPoints(history.map(point=>({label:new Date(point.timestamp*1000).toLocaleDateString('tr-TR',{day:'numeric',month:'short'}),price:point.price,value:point.price*Number(asset.units)})))}).finally(()=>{if(!cancelled)setLoading(false)});return()=>{cancelled=true}},[asset.id,range])
+  const first=points[0]?.price||Number(asset.average_cost),last=points[points.length-1]?.price||Number(asset.current_price),periodChange=last-first,positive=periodChange>=0
+  return <div className="asset-detail-backdrop"><section className="asset-detail"><header><button className="icon-button subtle" title="Geri" onClick={close}><ArrowLeft/></button><div><b>{asset.symbol}</b><small>{asset.name}</small></div><button className="icon-button subtle" title={watched?'Takipten çıkar':'Takip et'} onClick={toggleWatch}>{watched?<BookmarkCheck/>:<Bookmark/>}</button></header><div className="detail-quote"><small>Güncel fiyat</small><strong>{formatMoney(Number(asset.current_price))}</strong><span className={positive?'positive':'negative'}>{periodChange>=0?'+':''}{formatMoney(periodChange)}</span></div><div className={`asset-detail-chart ${positive?'positive':'negative'}`}>{loading?<div className="chart-loading">Grafik hazırlanıyor…</div>:<ResponsiveContainer><AreaChart data={points}><defs><linearGradient id="assetDetailFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={positive?'#3d8b68':'#dc5b4f'} stopOpacity=".25"/><stop offset="1" stopColor={positive?'#3d8b68':'#dc5b4f'} stopOpacity="0"/></linearGradient></defs><XAxis dataKey="label" hide/><YAxis hide domain={['dataMin','dataMax']}/><Tooltip formatter={(price:number)=>formatMoney(price)} labelStyle={{color:'#69736d'}}/><Area type="monotone" dataKey="price" stroke={positive?'#3d8b68':'#dc5b4f'} strokeWidth={2.2} fill="url(#assetDetailFill)" dot={false}/></AreaChart></ResponsiveContainer>}</div><RangeTabs value={range} onChange={setRange}/><section className="position-summary"><h3>Pozisyonum</h3><div><span>Adet<b>{Number(asset.units).toLocaleString('tr-TR')}</b></span><span>Toplam değer<b>{formatMoney(value)}</b></span><span>Ort. fiyat<b>{formatMoney(Number(asset.average_cost))}</b></span><span>Portföy getirisi<b className={gain>=0?'positive':'negative'}>{rate.toLocaleString('tr-TR',{maximumFractionDigits:2})}%</b></span><span>Toplam getiri<b className={gain>=0?'positive':'negative'}>{formatMoney(gain)}</b></span></div></section></section></div>
 }
 
 function SettingsPage({theme,setTheme,email,catAlerts,setCatAlerts,openCategories,openGuide}:{theme:'light'|'dark';setTheme:(x:'light'|'dark')=>void;email:string;catAlerts:boolean;setCatAlerts:(x:boolean)=>void;openCategories:()=>void;openGuide:()=>void}) { const [message,setMessage]=useState(''); async function resetPassword(){const redirectTo=new URL(import.meta.env.BASE_URL,window.location.origin).toString();const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo});setMessage(error?.message||'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.')} return <div className="page-content settings-page"><section className="panel settings-list"><div className="settings-row" data-tour="settings"><span className="settings-icon">{theme==='light'?<Sun/>:<Moon/>}</span><span><b>Görünüm</b><small>{theme==='light'?'Açık tema':'Koyu tema'}</small></span><label className="switch"><input type="checkbox" checked={theme==='dark'} onChange={e=>setTheme(e.target.checked?'dark':'light')}/><span/></label></div><div className="settings-row"><span className="settings-icon"><img src={`${import.meta.env.BASE_URL}happy-cat.png`} alt="" /></span><span><b>Kedi bildirimi</b><small>Gelir ve gider kaydında görsel bildirim göster</small></span><label className="switch"><input type="checkbox" checked={catAlerts} onChange={e=>setCatAlerts(e.target.checked)}/><span/></label></div><button onClick={openGuide}><span className="settings-icon"><HelpCircle/></span><span><b>Nasıl kullanılır?</b><small>Ekran üzerinde adım adım göster</small></span><ChevronRight/></button><button onClick={openCategories}><span className="settings-icon"><Tags/></span><span><b>Kategoriler</b><small>Gelir ve gider kategorilerini yönetin</small></span><ChevronRight/></button><button onClick={resetPassword}><span className="settings-icon"><KeyRound/></span><span><b>Şifre sıfırla</b><small>{email}</small></span><ChevronRight/></button>{message&&<div className="settings-message">{message}</div>}<button onClick={()=>supabase.auth.signOut()}><span className="settings-icon"><LogOut/></span><span><b>Çıkış yap</b><small>{email}</small></span><ChevronRight/></button></section></div> }
@@ -498,34 +545,39 @@ type AssetDraft = {
   selected?: Pick<AssetCatalogItem, 'kind' | 'symbol' | 'exchange' | 'dataSource'>
 }
 
-function AssetModal({userId,close,saved}:{userId:string;close:()=>void;saved:()=>void}) {
+function GoldBarIcon() { return <span className="gold-bar-icon" aria-hidden="true"><i/><i/><i/></span> }
+function CurrencyPairIcon() { return <span className="currency-pair-icon" aria-hidden="true"><b>$</b><b>€</b></span> }
+
+function AssetModal({userId,assets,close,saved,assetsChanged}:{userId:string;assets:Asset[];close:()=>void;saved:()=>void;assetsChanged:()=>void}) {
   const kinds = [
     { name: 'Hisse', icon: TrendingUp },
-    { name: 'Altın', icon: Gem },
+    { name: 'Altın', icon: GoldBarIcon },
     { name: 'Kripto', icon: Bitcoin },
     { name: 'Fon', icon: Landmark },
-    { name: 'Döviz', icon: CircleDollarSign }
+    { name: 'Para', icon: CurrencyPairIcon }
   ]
   const initialDraft=useMemo<AssetDraft>(()=>{try{return JSON.parse(sessionStorage.getItem('harcamac-asset-draft')||'{}')}catch{return {}}},[])
   const restoredSelected=initialDraft.selected?assetCatalog.find(item=>item.kind===initialDraft.selected?.kind&&item.symbol===initialDraft.selected?.symbol&&item.exchange===initialDraft.selected?.exchange&&item.dataSource===initialDraft.selected?.dataSource)||null:null
-  const [step,setStep]=useState(initialDraft.step||0),[kind,setKind]=useState(initialDraft.kind||'Hisse'),[exchange,setExchange]=useState(initialDraft.exchange??'BIST'),[query,setQuery]=useState(initialDraft.query||''),[selected,setSelected]=useState<AssetCatalogItem|null>(restoredSelected),[purchaseDate,setPurchaseDate]=useState(initialDraft.purchaseDate||today),[units,setUnits]=useState(initialDraft.units||''),[price,setPrice]=useState(initialDraft.price||''),[busy,setBusy]=useState(false),[message,setMessage]=useState('')
+  const initialKind=initialDraft.kind==='Döviz'?'Para':initialDraft.kind||'Hisse'
+  const [step,setStep]=useState(initialDraft.step||0),[kind,setKind]=useState(initialKind),[exchange,setExchange]=useState(initialDraft.exchange??'BIST'),[query,setQuery]=useState(initialDraft.query||''),[selected,setSelected]=useState<AssetCatalogItem|null>(restoredSelected),[purchaseDate,setPurchaseDate]=useState(initialDraft.purchaseDate||today),[units,setUnits]=useState(initialDraft.units||''),[price,setPrice]=useState(initialDraft.price||''),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[monthlyBusy,setMonthlyBusy]=useState(false),[monthlyEnabled,setMonthlyEnabled]=useState(()=>assets.some(asset=>asset.symbol===MONTHLY_BALANCE_SYMBOL))
   const hasExchangeStep=kind==='Hisse'
   const steps=hasExchangeStep?['Tür','Borsa','Sembol','Alış','Adet']:['Tür','Sembol','Alış','Adet']
   const symbolStep=hasExchangeStep?2:1, purchaseStep=symbolStep+1, unitsStep=symbolStep+2
   const priceCurrency=exchange==='NASDAQ'||exchange==='NYSE'||exchange==='ABD'?'$':exchange==='AVRUPA'?'€':'₺'
-  const markets=[{id:'BIST',name:'Borsa İstanbul',note:'Türkiye'},{id:'NASDAQ',name:'NASDAQ',note:'Yakında',disabled:true},{id:'NYSE',name:'NYSE',note:'Yakında',disabled:true},{id:'AVRUPA',name:'Avrupa',note:'Yakında',disabled:true}]
+  const markets=[{id:'BIST',name:'Borsa İstanbul',note:'Türkiye',logo:'borsa-istanbul.png'},{id:'NASDAQ',name:'NASDAQ',note:'Yakında',logo:'nasdaq.svg',disabled:true},{id:'NYSE',name:'NYSE',note:'Yakında',logo:'nyse.svg',disabled:true},{id:'AVRUPA',name:'Euronext',note:'Yakında',logo:'euronext.svg',disabled:true}]
   const matches=useMemo(()=>assetCatalog.filter(item=>item.kind===kind&&(!hasExchangeStep||item.exchange===exchange)&&(item.name.toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr'))||item.symbol.toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr')))),[kind,exchange,hasExchangeStep,query])
   useEffect(()=>{sessionStorage.setItem('harcamac-asset-draft',JSON.stringify({step,kind,exchange,query,purchaseDate,units,price,selected:selected?{kind:selected.kind,symbol:selected.symbol,exchange:selected.exchange,dataSource:selected.dataSource}:undefined}))},[step,kind,exchange,query,purchaseDate,units,price,selected])
   useEffect(()=>{if(!selected||!purchaseDate)return;let cancelled=false;setBusy(true);setMessage('');fetchHistoricalAssetPrice(selected,purchaseDate).then(value=>{if(cancelled)return;if(value){setPrice(String(value));setMessage('Alış tarihindeki fiyat dolduruldu.')}}).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:'Bu tarih için fiyat bulunamadı, elle girebilirsin.')}).finally(()=>{if(!cancelled)setBusy(false)});return()=>{cancelled=true}},[selected,purchaseDate])
   function chooseKind(value:string){setKind(value);setExchange(value==='Hisse'?'BIST':'');setStep(0);setSelected(null);setQuery('');setPrice('');setMessage('')}
   function chooseExchange(value:string){setExchange(value);setSelected(null);setQuery('');setPrice('');setMessage('')}
+  async function toggleMonthlyBalance(enabled:boolean){setMonthlyBusy(true);const existing=assets.find(asset=>asset.symbol===MONTHLY_BALANCE_SYMBOL);const {error}=enabled?await supabase.from('assets').insert({user_id:userId,name:'Aylık Denge',symbol:MONTHLY_BALANCE_SYMBOL,kind:'Para',units:1,average_cost:0,current_price:0}):existing?await supabase.from('assets').delete().eq('id',existing.id):{error:null};setMonthlyBusy(false);if(error)return alert(error.message);setMonthlyEnabled(enabled);assetsChanged()}
   function clearAndClose(){sessionStorage.removeItem('harcamac-asset-draft');close()}
   async function submit(e:FormEvent){e.preventDefault();if(!selected||!units||!price)return;setBusy(true);const payload={user_id:userId,name:selected.name,symbol:selected.symbol.toUpperCase(),kind:selected.kind,units:Number(units),average_cost:Number(price),current_price:Number(price),purchase_date:purchaseDate};const {error}=await supabase.from('assets').insert(payload);setBusy(false);if(error)alert(error.message);else{sessionStorage.removeItem('harcamac-asset-draft');saved()}}
   return <Modal title="Varlık ekle" close={clearAndClose}><form className="asset-wizard" onSubmit={submit}>
-    <div className="wizard-steps" style={{gridTemplateColumns:`repeat(${steps.length}, minmax(0, 1fr))`}}>{steps.map((label,index)=><span key={label} className={index===step?'active':index<step?'done':''}>{index+1}<b>{label}</b></span>)}</div>
+    <div className="wizard-steps" style={{gridTemplateColumns:`repeat(${steps.length}, minmax(0, 1fr))`}}>{steps.map((label,index)=><span key={label} className={index===step?'active':index<step?'done':''}><em>{index+1}.</em><b>{label}</b></span>)}</div>
     {step===0&&<section className="wizard-pane asset-kind-grid">{kinds.map(item=><button type="button" key={item.name} className={kind===item.name?'active':''} onClick={()=>chooseKind(item.name)}><item.icon/><span>{item.name}</span></button>)}</section>}
-    {hasExchangeStep&&step===1&&<section className="wizard-pane asset-kind-grid asset-market-grid">{markets.map(market=><button type="button" key={market.id} disabled={market.disabled} className={exchange===market.id?'active':''} onClick={()=>chooseExchange(market.id)}><WalletCards/><span>{market.name}</span><small>{market.note}</small></button>)}</section>}
-    {step===symbolStep&&<section className="wizard-pane"><label className="search asset-search"><Search/><input placeholder={`${kind} ara`} value={query} onChange={e=>setQuery(e.target.value)}/></label><div className="symbol-results">{matches.slice(0,150).map(item=><button type="button" key={`${item.kind}-${item.exchange||'global'}-${item.dataSource||'yahoo'}-${item.symbol}`} className={selected===item?'active':''} onClick={()=>setSelected(item)}><b>{item.symbol}</b><span>{item.name}</span></button>)}</div>{matches.length>150&&<small className="result-limit">{matches.length.toLocaleString('tr-TR')} sonuç içinde arama yapabilirsin.</small>}</section>}
+    {hasExchangeStep&&step===1&&<section className="wizard-pane asset-kind-grid asset-market-grid">{markets.map(market=><button type="button" key={market.id} disabled={market.disabled} className={exchange===market.id?'active':''} onClick={()=>chooseExchange(market.id)}><img src={`${import.meta.env.BASE_URL}markets/${market.logo}`} alt=""/><span>{market.name}</span><small>{market.note}</small></button>)}</section>}
+    {step===symbolStep&&<section className="wizard-pane">{kind==='Para'&&<label className="monthly-balance-option"><span><b>Aylık dengemi varlıklarıma ekle</b><small>Bu ayın gelir ve gider farkı otomatik güncellenir.</small></span><span className="switch"><input type="checkbox" checked={monthlyEnabled} disabled={monthlyBusy} onChange={e=>void toggleMonthlyBalance(e.target.checked)}/><span/></span></label>}<label className="search asset-search"><Search/><input placeholder={`${kind} ara`} value={query} onChange={e=>setQuery(e.target.value)}/></label><div className="symbol-results">{matches.slice(0,150).map(item=><button type="button" key={`${item.kind}-${item.exchange||'global'}-${item.dataSource||'yahoo'}-${item.symbol}`} className={selected===item?'active':''} onClick={()=>setSelected(item)}><b>{item.symbol}</b><span>{item.name}</span></button>)}</div>{matches.length>150&&<small className="result-limit">{matches.length.toLocaleString('tr-TR')} sonuç içinde arama yapabilirsin.</small>}</section>}
     {step===purchaseStep&&<section className="wizard-pane form-grid compact purchase-grid"><label className="full">Seçilen varlık<input className="selected-asset-input" readOnly aria-disabled="true" tabIndex={-1} value={selected?`${selected.symbol} - ${selected.name}`:''}/></label><label className="purchase-field">Alış tarihi<input required type="date" max={today} value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value>today?today:e.target.value)}/><small className="field-hint field-hint-spacer" aria-hidden="true">&nbsp;</small></label><label className="purchase-field">Alış fiyatı<div className="price-input"><input required type="number" min="0" step="any" value={price} onChange={e=>setPrice(e.target.value)}/><span>{priceCurrency}</span></div><small className="field-hint">Otomatik gelen fiyatı istersen düzeltebilirsin.</small></label>{message&&<div className="form-message full">{message}</div>}</section>}
     {step===unitsStep&&<section className="wizard-pane form-grid compact"><label className="full">Adet / miktar<input required type="number" min="0" step="any" value={units} onChange={e=>setUnits(e.target.value)}/></label><div className="asset-preview full"><b>{selected?.name}</b><span>{Number(units||0).toLocaleString('tr-TR')} adet · {price?trMoney.format(Number(price)):'-'}</span><strong>{trMoney.format(Number(units||0)*Number(price||0))}</strong></div></section>}
     <div className="form-actions full"><button type="button" onClick={step===0?clearAndClose:()=>setStep(step-1)}>{step===0?'Vazgeç':'Geri'}</button>{step<unitsStep?<button type="button" className="primary" disabled={(step===1&&hasExchangeStep&&!exchange)||(step===symbolStep&&!selected)||(step===purchaseStep&&(!price||busy))} onClick={()=>setStep(step+1)}>Devam</button>:<button className="primary" disabled={busy||!selected||!units||!price}>{busy?'Kaydediliyor...':'Kaydet'}</button>}</div>
