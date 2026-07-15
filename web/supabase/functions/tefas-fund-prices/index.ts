@@ -10,6 +10,30 @@ function periodFor(date: string) {
   return [1, 3, 6, 12, 36, 60].find(period => period >= months) || 60
 }
 
+const rangePeriods: Record<string, number> = {
+  '1G': 1,
+  '1H': 1,
+  '1A': 1,
+  '3A': 3,
+  '6A': 6,
+  '1Y': 12,
+  '5Y': 60,
+}
+
+async function tefasRequest(path: string, body: Record<string, unknown>) {
+  const response = await fetch(`https://www.tefas.gov.tr/api/funds/${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'User-Agent': 'Mozilla/5.0 Harcamac/1.0',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error('TEFAS verisi alınamadı')
+  return response.json()
+}
+
 Deno.serve(async request => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders })
@@ -20,18 +44,29 @@ Deno.serve(async request => {
     const date = String(body?.date || new Date().toISOString().slice(0, 10))
     if (!symbol) throw new Error('Fon kodu eksik')
 
-    const response = await fetch('https://www.tefas.gov.tr/api/funds/fonFiyatBilgiGetir', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'User-Agent': 'Mozilla/5.0 Harcamac/1.0',
-      },
-      body: JSON.stringify({ fonKodu: symbol, dil: 'TR', periyod: String(periodFor(date)) }),
-    })
-    if (!response.ok) throw new Error('TEFAS fiyatı alınamadı')
-    const payload = await response.json()
+    if (body?.action === 'detail') {
+      const detailPayload = await tefasRequest('fonBilgiGetir', { fonKodu: symbol, dil: 'TR' })
+      const detail = Array.isArray(detailPayload?.resultList) ? detailPayload.resultList[0] || null : null
+      return new Response(JSON.stringify({ symbol, detail }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const range = String(body?.range || '')
+    const period = rangePeriods[range] || periodFor(date)
+    const payload = await tefasRequest('fonFiyatBilgiGetir', { fonKodu: symbol, dil: 'TR', periyod: String(period) })
     const rows = Array.isArray(payload?.resultList) ? payload.resultList : []
+
+    if (range) {
+      const cutoff = Date.now() - ({ '1G': 2, '1H': 8, '1A': 32, '3A': 95, '6A': 190, '1Y': 370, '5Y': 1835 }[range] || 32) * 86400000
+      const points = rows.flatMap((item: { tarih?: string; fiyat?: number }) => {
+        const timestamp = item.tarih ? Math.floor(new Date(`${item.tarih}T12:00:00+03:00`).getTime() / 1000) : 0
+        return timestamp * 1000 >= cutoff && Number(item.fiyat) > 0 ? [{ timestamp, price: Number(item.fiyat) }] : []
+      })
+      return new Response(JSON.stringify({ symbol, points }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
     const datedRows = rows.filter((item: { tarih?: string; fiyat?: number }) => item.tarih && item.tarih <= date && Number(item.fiyat) > 0)
     const pricedRows = rows.filter((item: { fiyat?: number }) => Number(item.fiyat) > 0)
     const row = datedRows[datedRows.length - 1] || pricedRows[pricedRows.length - 1]
