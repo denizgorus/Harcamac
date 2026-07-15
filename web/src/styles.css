@@ -55,6 +55,7 @@
   .filters{grid-template-columns:1fr}
   .filters .search,.filters select:last-child{grid-column:1}
 }
+.turkish-lira-symbol{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI Symbol","Arial Unicode MS",Arial,sans-serif!important;font-weight:500!important;font-style:normal;line-height:1}
 
 /* Portfolio discovery and detail views */
 .asset-view-tabs.four{grid-template-columns:repeat(4,1fr)}
