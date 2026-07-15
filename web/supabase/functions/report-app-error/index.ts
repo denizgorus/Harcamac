@@ -25,6 +25,9 @@ Deno.serve(async request => {
     if (!target) throw new Error('ERROR_REPORT_EMAIL tanımlı değil')
 
     const body = await request.json()
+    const isFeedback = body?.type === 'feedback'
+    const feedbackMessage = limitedText(body?.message, 4000).trim()
+    if (isFeedback && !feedbackMessage) throw new Error('Mesaj boş olamaz')
     const action = limitedText(body?.action, 180) || 'Bilinmeyen işlem'
     const context = body?.context && typeof body.context === 'object' ? body.context : {}
     const contextRows = Object.entries(context).slice(0, 30).map(([key, value]) =>
@@ -37,8 +40,10 @@ Deno.serve(async request => {
       body: JSON.stringify({
         from: sender,
         to: [target],
-        subject: `[Harcamaç hata] ${action}`,
-        html: `<div style="font-family:Arial,sans-serif;color:#202521;max-width:680px"><h2>Harcamaç hata bildirimi</h2><p><b>İşlem:</b> ${escapeHtml(action)}</p><p><b>Kullanıcı:</b> ${escapeHtml(limitedText(body?.reporterEmail, 200))}</p><p><b>Sayfa:</b> ${escapeHtml(limitedText(body?.page, 120))}</p><p><b>Zaman:</b> ${escapeHtml(limitedText(body?.occurredAt, 80))}</p><table style="width:100%;border-collapse:collapse;background:#f5f7f5">${contextRows}</table><h3>Teknik ayrıntı</h3><pre style="white-space:pre-wrap;background:#151916;color:#f4f7f4;padding:14px;border-radius:6px">${escapeHtml(limitedText(body?.technical))}</pre><p style="font-size:12px;color:#66736c">${escapeHtml(limitedText(body?.url, 600))}<br>${escapeHtml(limitedText(body?.userAgent, 600))}</p></div>`,
+        subject: isFeedback ? '[Harcamaç] Yeni öneri ve geri bildirim' : `[Harcamaç hata] ${action}`,
+        html: isFeedback
+          ? `<div style="font-family:Arial,sans-serif;color:#202521;max-width:680px"><h2>Yeni öneri ve geri bildirim</h2><p><b>Kullanıcı:</b> ${escapeHtml(limitedText(body?.reporterEmail, 200))}</p><p><b>Zaman:</b> ${escapeHtml(limitedText(body?.occurredAt, 80))}</p><div style="white-space:pre-wrap;background:#f5f7f5;padding:16px;border-radius:6px;line-height:1.6">${escapeHtml(feedbackMessage)}</div><p style="font-size:12px;color:#66736c">${escapeHtml(limitedText(body?.url, 600))}<br>${escapeHtml(limitedText(body?.userAgent, 600))}</p></div>`
+          : `<div style="font-family:Arial,sans-serif;color:#202521;max-width:680px"><h2>Harcamaç hata bildirimi</h2><p><b>İşlem:</b> ${escapeHtml(action)}</p><p><b>Kullanıcı:</b> ${escapeHtml(limitedText(body?.reporterEmail, 200))}</p><p><b>Sayfa:</b> ${escapeHtml(limitedText(body?.page, 120))}</p><p><b>Zaman:</b> ${escapeHtml(limitedText(body?.occurredAt, 80))}</p><table style="width:100%;border-collapse:collapse;background:#f5f7f5">${contextRows}</table><h3>Teknik ayrıntı</h3><pre style="white-space:pre-wrap;background:#151916;color:#f4f7f4;padding:14px;border-radius:6px">${escapeHtml(limitedText(body?.technical))}</pre><p style="font-size:12px;color:#66736c">${escapeHtml(limitedText(body?.url, 600))}<br>${escapeHtml(limitedText(body?.userAgent, 600))}</p></div>`,
       }),
     })
     if (!response.ok) throw new Error(`E-posta servisi ${response.status} döndürdü`)
