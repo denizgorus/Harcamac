@@ -373,20 +373,29 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
     if (catAlerts) setToast({ kind, text: kind === 'income' ? 'Gelir eklendi' : 'Gider eklendi' })
   }
 
-  async function refreshBistPrices(sourceAssets = assets) {
-    const candidates = sourceAssets.filter(asset => (asset.kind === 'Hisse' || asset.kind === 'Fon') && asset.symbol.trim())
-    if (!candidates.length) return
-    try {
-      const quotes = await fetchBistPrices(candidates)
-      if (!quotes.length) return
-      await Promise.all(quotes.map(quote => supabase.from('assets').update({ current_price: quote.price }).eq('id', quote.id)))
-      setAssets(items => items.map(asset => {
-        const quote = quotes.find(item => item.id === asset.id)
-        return quote ? { ...asset, current_price: quote.price } : asset
-      }))
-    } catch (error) {
-      console.error('Piyasa fiyatları alınamadı.', error)
-    }
+  async function refreshAssetPrices(sourceAssets = assets) {
+    const exchangeCandidates = sourceAssets.filter(asset => (asset.kind === 'Hisse' || asset.kind === 'Fon') && asset.symbol.trim())
+    const exchangeQuotes = await fetchBistPrices(exchangeCandidates).catch(error => {
+      console.error('Hisse ve fon fiyatları alınamadı.', error)
+      return []
+    })
+    const otherCandidates = sourceAssets.filter(asset => asset.symbol !== MONTHLY_BALANCE_SYMBOL && asset.kind !== 'Hisse' && asset.kind !== 'Fon')
+    const otherResults = await Promise.allSettled(otherCandidates.map(async asset => {
+      if (asset.kind === 'Para' && (asset.symbol === 'TL' || asset.symbol === 'TRY')) return { id: asset.id, price: 1 }
+      const catalogItem = assetCatalog.find(item => item.kind === asset.kind && item.symbol === asset.symbol)
+        || assetCatalog.find(item => item.symbol === asset.symbol)
+      if (!catalogItem) return null
+      const price = await fetchHistoricalAssetPrice(catalogItem, today)
+      return price && Number.isFinite(price) ? { id: asset.id, price: Number(price) } : null
+    }))
+    const otherQuotes = otherResults.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : [])
+    const quotes = [...exchangeQuotes, ...otherQuotes]
+    if (!quotes.length) return
+    await Promise.all(quotes.map(quote => supabase.from('assets').update({ current_price: quote.price }).eq('id', quote.id)))
+    setAssets(items => items.map(asset => {
+      const quote = quotes.find(item => item.id === asset.id)
+      return quote ? { ...asset, current_price: quote.price } : asset
+    }))
   }
 
   useEffect(() => {
@@ -397,7 +406,7 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
     async function runRefresh() {
       if (cancelled || running || document.visibilityState !== 'visible') return
       running = true
-      try { await refreshBistPrices(assetsRef.current) } finally { running = false }
+      try { await refreshAssetPrices(assetsRef.current) } finally { running = false }
     }
     async function refreshLoop() {
       await runRefresh()
@@ -714,7 +723,7 @@ function AssetModal({userId,assets,close,saved,assetsChanged}:{userId:string;ass
   function chooseExchange(value:string){setExchange(value);setSelected(null);setQuery('');setPrice('')}
   async function toggleMonthlyBalance(enabled:boolean){setMonthlyBusy(true);const existing=assets.find(asset=>asset.symbol===MONTHLY_BALANCE_SYMBOL);const {error}=enabled?await supabase.from('assets').insert({user_id:userId,name:'Aylık Denge',symbol:MONTHLY_BALANCE_SYMBOL,kind:'Para',units:1,average_cost:0,current_price:0}):existing?await supabase.from('assets').delete().eq('id',existing.id):{error:null};setMonthlyBusy(false);if(error)return showAppError(enabled?'Aylık dengeyi varlıklara ekleme':'Aylık dengeyi varlıklardan kaldırma',error,{etkin:enabled});setMonthlyEnabled(enabled);assetsChanged()}
   function clearAndClose(){sessionStorage.removeItem('harcamac-asset-draft');close()}
-  async function submit(e:FormEvent){e.preventDefault();if(!selected||!units||!price)return;setBusy(true);const payload={user_id:userId,name:selected.name,symbol:selected.symbol.toUpperCase(),kind:selected.kind,units:Number(units),average_cost:Number(price),current_price:Number(price),purchase_date:purchaseDate};const {error}=await supabase.from('assets').insert(payload);setBusy(false);if(error)showAppError('Varlık ekleme',error,{varlık:selected.name,sembol:selected.symbol,tür:selected.kind,borsa:selected.exchange||'',alış_tarihi:purchaseDate,alış_fiyatı:Number(price),adet:Number(units)});else{sessionStorage.removeItem('harcamac-asset-draft');saved()}}
+  async function submit(e:FormEvent){e.preventDefault();if(!selected||!units||!price)return;setBusy(true);const purchasePrice=Number(price);const latestPrice=purchaseDate<today?await fetchHistoricalAssetPrice(selected,today).catch(()=>purchasePrice):purchasePrice;const payload={user_id:userId,name:selected.name,symbol:selected.symbol.toUpperCase(),kind:selected.kind,units:Number(units),average_cost:purchasePrice,current_price:Number(latestPrice)||purchasePrice,purchase_date:purchaseDate};const {error}=await supabase.from('assets').insert(payload);setBusy(false);if(error)showAppError('Varlık ekleme',error,{varlık:selected.name,sembol:selected.symbol,tür:selected.kind,borsa:selected.exchange||'',alış_tarihi:purchaseDate,alış_fiyatı:purchasePrice,güncel_fiyat:payload.current_price,adet:Number(units)});else{sessionStorage.removeItem('harcamac-asset-draft');saved()}}
   return <Modal title="Varlık ekle" close={clearAndClose} className={step===symbolStep?'asset-symbol-modal':''}><form className="asset-wizard" onSubmit={submit}>
     <div className="wizard-steps" style={{gridTemplateColumns:`repeat(${steps.length}, minmax(0, 1fr))`}}>{steps.map((label,index)=><span key={label} className={index===step?'active':index<step?'done':''}><em>{index+1}.</em><b>{label}</b></span>)}</div>
     {step===0&&<section className="wizard-pane asset-kind-grid">{kinds.map(item=><button type="button" key={item.name} className={kind===item.name?'active':''} onClick={()=>chooseKind(item.name)}><item.icon/><span>{item.label||item.name}</span></button>)}</section>}
