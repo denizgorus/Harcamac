@@ -6,7 +6,7 @@ const isGithubPages = Boolean(
 )
 
 export default defineConfig({
-  base: isGithubPages ? '/Harcamac/' : '/',
+  base: isGithubPages ? './' : '/',
   plugins: [react()],
   server: {
     proxy: {
