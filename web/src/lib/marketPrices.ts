@@ -286,7 +286,11 @@ function normalizeHistory(points: MarketHistoryPoint[], range: MarketRange) {
   const source = range === '1G' && valid.length < 2 ? eligible.slice(-2) : valid
   const byTimestamp = new Map<number, MarketHistoryPoint>()
   source.forEach(point => byTimestamp.set(Number(point.timestamp), { timestamp: Number(point.timestamp), price: Number(point.price) }))
-  return [...byTimestamp.values()].sort((left, right) => left.timestamp - right.timestamp)
+  const normalized = [...byTimestamp.values()].sort((left, right) => left.timestamp - right.timestamp)
+  if (range !== 'Maks.' && normalized.length && normalized[0].timestamp * 1000 > start) {
+    normalized.unshift({ timestamp: Math.floor(start / 1000), price: normalized[0].price })
+  }
+  return normalized
 }
 
 async function fetchYahooHistory(symbol: string, range: MarketRange): Promise<MarketHistoryPoint[]> {
@@ -294,7 +298,7 @@ async function fetchYahooHistory(symbol: string, range: MarketRange): Promise<Ma
   if (!import.meta.env.DEV) {
     const { data, error } = await supabase.functions.invoke('yahoo-bist-prices', { body: { symbols: [symbol], range, preserveSymbols: true } })
     const points = !error && Array.isArray(data?.quotes?.[0]?.points) ? data.quotes[0].points : []
-    if (points.length > 1) return normalizeHistory(points as MarketHistoryPoint[], range)
+    if (points.length) return normalizeHistory(points as MarketHistoryPoint[], range)
   }
   const base = import.meta.env.DEV ? '/api/yahoo' : 'https://query2.finance.yahoo.com'
   const query = range === '1H'
@@ -312,7 +316,7 @@ async function fetchYahooHistory(symbol: string, range: MarketRange): Promise<Ma
 async function fetchTefasHistory(symbol: string, range: MarketRange) {
   if (!import.meta.env.DEV) {
     const { data, error } = await supabase.functions.invoke('tefas-fund-prices', { body: { symbol, range } })
-    if (!error && Array.isArray(data?.points) && data.points.length > 1) return normalizeHistory(data.points as MarketHistoryPoint[], range)
+    if (!error && Array.isArray(data?.points) && data.points.length) return normalizeHistory(data.points as MarketHistoryPoint[], range)
     throw new Error(`${symbol} TEFAS grafiği alınamadı`)
   }
   const period = ({ '1G': 1, '1H': 1, '1A': 1, '3A': 3, '6A': 6, '1Y': 12, '5Y': 60, 'Maks.': 60 } as const)[range]
@@ -349,7 +353,7 @@ export async function fetchAssetHistory(asset: Asset, range: MarketRange): Promi
   try {
     if (item?.dataSource === 'tefas') {
       const points = await fetchTefasHistory(item.symbol, range)
-      if (points.length > 1) return normalizeHistory(points, range)
+      if (points.length) return normalizeHistory(points, range)
     }
     if (!item || item.kind !== 'Para' || item.symbol !== 'TL') {
       const symbol = item ? marketSymbolFor(item) : asset.kind === 'Hisse' ? bistYahooSymbol(asset.symbol) : asset.symbol
@@ -361,7 +365,7 @@ export async function fetchAssetHistory(asset: Asset, range: MarketRange): Promi
         const usdTry = await fetchHistoricalWithYahoo('USDTRY=X', localDay(new Date()))
         points = points.map(point => ({ ...point, price: point.price * usdTry }))
       }
-      if (points.length > 1) return normalizeHistory(points, range)
+      if (points.length) return normalizeHistory(points, range)
     }
   } catch { /* The chart stays empty when the provider is unavailable. */ }
   return []
