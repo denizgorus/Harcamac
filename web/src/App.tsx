@@ -18,16 +18,17 @@ function normalizeSearch(value:string) {
   return value.toLocaleLowerCase('tr-TR').replace(/[çğıöşü]/g,letter=>replacements[letter]).replace(/[^a-z0-9]+/g,' ').trim()
 }
 
-function assetSearchScore(item:AssetCatalogItem,query:string) {
+function textSearchScore(value:string,query:string,symbol='') {
   const terms=normalizeSearch(query).split(' ').filter(Boolean)
   if(!terms.length)return 0
-  const words=normalizeSearch(`${item.symbol} ${item.name}`).split(' ').filter(Boolean)
+  const words=normalizeSearch(`${symbol} ${value}`).split(' ').filter(Boolean)
+  const symbolIndex=symbol?0:-1
   const usedWords=new Set<number>()
   let score=0
   for(const term of terms){
     const available=(word:string,index:number)=>!usedWords.has(index)&&word===term
     const exact=words.findIndex(available)
-    const symbolPrefix=exact<0&&!usedWords.has(0)&&words[0]?.startsWith(term)?0:-1
+    const symbolPrefix=exact<0&&symbolIndex>=0&&!usedWords.has(symbolIndex)&&words[symbolIndex]?.startsWith(term)?symbolIndex:-1
     const prefix=exact<0&&symbolPrefix<0&&term.length>=3?words.findIndex((word,index)=>!usedWords.has(index)&&word.startsWith(term)):-1
     const partial=exact<0&&symbolPrefix<0&&prefix<0&&term.length>=3?words.findIndex((word,index)=>!usedWords.has(index)&&word.includes(term)):-1
     if(exact<0&&symbolPrefix<0&&prefix<0&&partial<0)return null
@@ -35,8 +36,12 @@ function assetSearchScore(item:AssetCatalogItem,query:string) {
     usedWords.add(matched)
     score+=exact>=0?exact:symbolPrefix>=0?10:prefix>=0?20+prefix:40+partial
   }
-  if(normalizeSearch(item.symbol)===terms.join(''))score-=1000
+  if(symbol&&normalizeSearch(symbol)===terms.join(''))score-=1000
   return score
+}
+
+function assetSearchScore(item:AssetCatalogItem,query:string) {
+  return textSearchScore(item.name,query,item.symbol)
 }
 
 function currentMonthlyBalance(entries: Entry[]) {
@@ -431,7 +436,7 @@ function ChartBody({widget,entries}:{widget:ChartWidget;entries:Entry[]}) {
 }
 function Transactions({ entries, categories, onEdit, onDelete }: { entries:Entry[];categories:Category[];onEdit:(e:Entry)=>void;onDelete:(id:string)=>void }) {
   const [query,setQuery]=useState(''), [kind,setKind]=useState<'all'|FlowKind>('all'), [cat,setCat]=useState('all'), [sort,setSort]=useState<'date_desc'|'date_asc'|'amount_desc'|'amount_asc'>('date_desc')
-  const filtered=useMemo(()=>entries.filter(e=>(kind==='all'||e.kind===kind)&&(cat==='all'||e.category_id===cat)&&(e.title.toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr'))||(e.category_name||'').toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr')))).sort((a,b)=>sort==='amount_desc'?Number(b.amount)-Number(a.amount):sort==='amount_asc'?Number(a.amount)-Number(b.amount):sort==='date_asc'?a.entry_date.localeCompare(b.entry_date):b.entry_date.localeCompare(a.entry_date)),[entries,query,kind,cat,sort])
+  const filtered=useMemo(()=>entries.filter(e=>(kind==='all'||e.kind===kind)&&(cat==='all'||e.category_id===cat)&&textSearchScore(`${e.title} ${e.category_name||''}`,query)!==null).sort((a,b)=>sort==='amount_desc'?Number(b.amount)-Number(a.amount):sort==='amount_asc'?Number(a.amount)-Number(b.amount):sort==='date_asc'?a.entry_date.localeCompare(b.entry_date):b.entry_date.localeCompare(a.entry_date)),[entries,query,kind,cat,sort])
   const groups=Object.entries(filtered.reduce((a,e)=>{const key=trMonth.format(new Date(`${e.entry_date}T12:00:00`));(a[key]||=[]).push(e);return a},{} as Record<string,Entry[]>))
   return <div className="page-content transactions-page"><div className="filters" data-tour="filters"><label className="search"><Search/><input placeholder="Hareket ara" value={query} onChange={e=>setQuery(e.target.value)}/></label><select value={kind} onChange={e=>setKind(e.target.value as any)}><option value="all">Tüm türler</option><option value="expense">Giderler</option><option value="income">Gelirler</option></select><select value={cat} onChange={e=>setCat(e.target.value)}><option value="all">Tüm kategoriler</option>{categories.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select><select value={sort} onChange={e=>setSort(e.target.value as any)}><option value="date_desc">Tarih: yeniden eskiye</option><option value="date_asc">Tarih: eskiden yeniye</option><option value="amount_desc">Tutar: yüksekten düşüğe</option><option value="amount_asc">Tutar: düşükten yükseğe</option></select></div>
     {groups.length?groups.map(([month,list])=><section className="transaction-group" key={month}><div className="month-title"><b>{month}</b><span>{list.length} hareket</span></div><div className="panel"><EntryRows entries={list} actions={{onEdit,onDelete}}/></div></section>):<Empty text="Henüz hareket bulunmuyor."/>}</div>
@@ -482,7 +487,7 @@ function Assets({assets,entries,onDelete,onChanged}:{assets:Asset[];entries:Entr
   const gainRate = cost > 0 ? gain / cost * 100 : 0
   const groupedAssets=Object.values(assets.reduce((acc,asset)=>{const name=asset.kind==='Döviz'?'Para':asset.kind||'Diğer';acc[name]||={name,items:[],value:0,cost:0};acc[name].items.push(asset);acc[name].value+=resolvedAssetValue(asset,monthlyBalance);acc[name].cost+=asset.symbol===MONTHLY_BALANCE_SYMBOL?0:Number(asset.units)*Number(asset.average_cost);return acc},{} as Record<string,{name:string;items:Asset[];value:number;cost:number}>)).sort((a,b)=>b.value-a.value)
   const watchItems=watchKeys.flatMap(key=>{const item=assetCatalog.find(candidate=>`${candidate.kind}:${candidate.symbol}`===key);return item?[item]:[]})
-  const watchResults=watchQuery.trim()?assetCatalog.filter(item=>(item.kind==='Hisse'||item.kind==='Fon'||item.kind==='Kripto'||item.kind==='Endeks')&&(item.symbol.toLocaleLowerCase('tr').includes(watchQuery.toLocaleLowerCase('tr'))||item.name.toLocaleLowerCase('tr').includes(watchQuery.toLocaleLowerCase('tr')))).slice(0,8):[]
+  const watchResults=watchQuery.trim()?assetCatalog.flatMap(item=>{if(item.kind!=='Hisse'&&item.kind!=='Fon'&&item.kind!=='Kripto'&&item.kind!=='Endeks')return [];const score=assetSearchScore(item,watchQuery);return score===null?[]:[{item,score}]}).sort((left,right)=>left.score-right.score||left.item.name.localeCompare(right.item.name,'tr')).slice(0,8).map(result=>result.item):[]
   const formatMoney=(value:number)=>hidden?'******':currency==='USD'?new Intl.NumberFormat('tr-TR',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(value/Math.max(usdTry,1)):trMoney.format(value)
   const cashReturns=useMemo(()=>{const result={interest:0,dividend:0};entries.filter(entry=>entry.kind==='income').forEach(entry=>{const text=`${entry.title} ${entry.category_name||''}`.toLocaleLowerCase('tr');if(text.includes('temettü'))result.dividend+=Number(entry.amount);if(text.includes('faiz')||text.includes('nema'))result.interest+=Number(entry.amount)});return result},[entries])
   useEffect(()=>{localStorage.setItem('asset-balance-hidden',String(hidden))},[hidden])
@@ -520,10 +525,12 @@ function MarketDiscover({formatMoney,watched,toggleWatch,openItem}:{formatMoney:
   const [recent,setRecent]=useState<AssetCatalogItem[]>(()=>{try{return JSON.parse(localStorage.getItem('asset-recent-searches')||'[]')}catch{return []}})
   const dayOpen=useRef<Record<string,number>>({})
   const featured=useMemo(()=>['XU100','SPX','NDX','DJI','BTC','TI1','ASELS','AAPL'].flatMap(symbol=>{const item=assetCatalog.find(candidate=>candidate.symbol===symbol);return item?[item]:[]}),[])
-  const results=useMemo(()=>{const normalized=query.trim().toLocaleLowerCase('tr');return assetCatalog.filter(item=>{
+  const results=useMemo(()=>assetCatalog.flatMap(item=>{
     const categoryMatch=category==='Tümü'||(category==='Türkiye'&&(item.exchange==='BIST'||item.dataSource==='tefas'))||(category==='ABD'&&(item.exchange==='NASDAQ'||item.exchange==='NYSE'))||(category==='Fonlar'&&item.kind==='Fon')||(category==='Kripto'&&item.kind==='Kripto')
-    return categoryMatch&&(!normalized||item.symbol.toLocaleLowerCase('tr').includes(normalized)||item.name.toLocaleLowerCase('tr').includes(normalized))
-  }).filter((item,index,list)=>list.findIndex(candidate=>candidate.kind===item.kind&&candidate.symbol===item.symbol)===index).slice(0,query?30:12)},[query,category])
+    if(!categoryMatch)return []
+    const score=assetSearchScore(item,query)
+    return score===null?[]:[{item,score}]
+  }).filter((result,index,list)=>list.findIndex(candidate=>candidate.item.kind===result.item.kind&&candidate.item.symbol===result.item.symbol)===index).sort((left,right)=>left.score-right.score||left.item.name.localeCompare(right.item.name,'tr')).slice(0,query?30:12).map(result=>result.item),[query,category])
   useEffect(()=>{let cancelled=false,running=false;async function refresh(){if(cancelled||running||document.hidden)return;running=true;const values=await Promise.allSettled(featured.map(async item=>{const key=`${item.kind}:${item.symbol}`,price=(await fetchHistoricalAssetPrice(item,today))||0;if(!dayOpen.current[key]){const asset={id:`discover-${item.symbol}`,user_id:'',name:item.name,symbol:item.symbol,kind:item.kind,units:1,average_cost:0,current_price:price};const history=await fetchAssetHistory(asset,'1G');dayOpen.current[key]=history[0]?.price||price}const first=dayOpen.current[key]||price,change=first?((price-first)/first)*100:0;return {key,price,change:Math.abs(change)<=100?change:0}}));running=false;if(!cancelled)setQuotes(Object.fromEntries(values.flatMap(value=>value.status==='fulfilled'?[[value.value.key,value.value]]:[])))}refresh();const timer=window.setInterval(refresh,15000);const visible=()=>{if(!document.hidden)refresh()};document.addEventListener('visibilitychange',visible);return()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener('visibilitychange',visible)}},[featured])
   function select(item:AssetCatalogItem){const next=[item,...recent.filter(candidate=>candidate.kind!==item.kind||candidate.symbol!==item.symbol)].slice(0,6);setRecent(next);localStorage.setItem('asset-recent-searches',JSON.stringify(next));openItem(item)}
   return <section className="discover-panel panel"><header><div><small>Piyasalar</small><h2>Keşfet</h2></div><Compass/></header><label className="search discover-search"><Search/><input placeholder="Hisse, fon, kripto veya endeks ara" value={query} onChange={event=>setQuery(event.target.value)}/>{query&&<button title="Aramayı temizle" onClick={()=>setQuery('')}><X/></button>}</label><div className="discover-categories">{(['Tümü','Türkiye','ABD','Fonlar','Kripto'] as const).map(item=><button key={item} className={category===item?'active':''} onClick={()=>setCategory(item)}>{item}</button>)}</div>
