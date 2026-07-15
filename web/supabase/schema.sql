@@ -17,8 +17,10 @@ create table if not exists public.entries (
 create table if not exists public.assets (
   id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
   name text not null, symbol text not null default '', kind text not null, units numeric(18,6) not null check (units >= 0),
-  average_cost numeric(18,4) not null default 0, current_price numeric(18,4) not null default 0, created_at timestamptz not null default now()
+  average_cost numeric(18,4) not null default 0, current_price numeric(18,4) not null default 0,
+  purchase_date date, created_at timestamptz not null default now()
 );
+alter table public.assets add column if not exists purchase_date date;
 
 alter table public.categories enable row level security;
 alter table public.entries enable row level security;

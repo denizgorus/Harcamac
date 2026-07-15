@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDownUp, BarChart3, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, HelpCircle, KeyRound, LayoutDashboard, LogOut, Menu, Moon, Pencil, PieChart as PieIcon, Plus, Search, Settings, Sun, Tags, Trash2, WalletCards, X } from 'lucide-react'
+import { ArrowDownUp, BarChart3, Bitcoin, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, Gem, HelpCircle, KeyRound, Landmark, LayoutDashboard, LogOut, Menu, Moon, Pencil, PieChart as PieIcon, Plus, Search, Settings, Sun, Tags, Trash2, TrendingUp, WalletCards, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { AssetCatalogItem, assetCatalog, fetchBistPrices, fetchHistoricalAssetPrice } from './lib/marketPrices'
 import { Asset, Cadence, Category, defaultCategories, Entry, FlowKind } from './types'
 
 type Page = 'dashboard' | 'transactions' | 'recurring' | 'assets' | 'settings'
@@ -169,12 +170,14 @@ function Auth({theme,setTheme}:{theme:'light'|'dark';setTheme:(theme:'light'|'da
 
   async function socialLogin() {
     setBusy(true); setMessage('')
+    if (!isSupabaseConfigured) { setMessage('Localhost girişi için web/.env dosyasına VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY ekleyin.'); setBusy(false); return }
     const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
     if (error) { setMessage(error.message); setBusy(false) }
   }
 
   async function resetPassword() {
     setBusy(true); setMessage('')
+    if (!isSupabaseConfigured) { setMessage('Şifre sıfırlama için önce Supabase bağlantısını web/.env dosyasında yapılandırın.'); setBusy(false); return }
     if (!email) { setMessage('Şifre sıfırlama bağlantısı için e-posta adresinizi yazın.'); setBusy(false); return }
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
     setMessage(error?.message || 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.')
@@ -198,6 +201,7 @@ function Auth({theme,setTheme}:{theme:'light'|'dark';setTheme:(theme:'light'|'da
     <section className="auth-story"><div className="auth-brand"><span className="brand-mark">₺</span> Harcamaç</div><div className="auth-mobile-story"><h1><TypingText text={headline} /></h1><p>{authDescription}</p></div><div className="auth-story-copy"><h1><TypingText text={headline} /></h1></div><small className="auth-description-footer">{authDescription}</small></section>
     <section className="auth-panel"><form className="auth-form" onSubmit={submit}>
       <div><h2>{mode === 'login' ? 'Tekrar hoş geldiniz' : 'Hesabınızı oluşturun'}</h2><p>{mode === 'login' ? 'Devam etmek için giriş yapın.' : 'Finans takibinize birkaç saniyede başlayın.'}</p></div>
+      {!isSupabaseConfigured && <div className="form-message">Localhost girişi için Supabase bilgileri eksik. `web/.env` dosyasına `VITE_SUPABASE_URL` ve `VITE_SUPABASE_ANON_KEY` ekleyip dev server’ı yeniden başlatın.</div>}
       {mode === 'signup' && <label>Ad soyad<input required value={name} onChange={e => setName(e.target.value)} autoComplete="name" /></label>}
       <label>E-posta<input required type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" /></label>
       <label>Şifre<input required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /></label>
@@ -220,12 +224,14 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
   const [assets, setAssets] = useState<Asset[]>([])
   const [loading, setLoading] = useState(true)
   const [entryOpen, setEntryOpen] = useState(false)
+  const [assetOpen, setAssetOpen] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [catAlerts, setCatAlerts] = useState(() => localStorage.getItem('catAlerts') !== 'false')
   const [toast, setToast] = useState<{kind:FlowKind;text:string}|null>(null)
   const [editEntry, setEditEntry] = useState<Entry | null>(null)
+  const assetsRef = useRef<Asset[]>([])
   const userId = session.user.id
 
   async function loadData() {
@@ -262,6 +268,23 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
     setCategories(loadedCategories); setAssets((a.data || []) as Asset[]); setLoading(false)
   }
   useEffect(() => { loadData() }, [userId])
+  useEffect(() => { assetsRef.current = assets }, [assets])
+  useEffect(() => {
+    const channel = supabase.channel(`assets-${userId}`).on('postgres_changes', {
+      event: '*', schema: 'public', table: 'assets', filter: `user_id=eq.${userId}`
+    }, payload => {
+      if (payload.eventType === 'DELETE') {
+        const deleted = payload.old as Pick<Asset, 'id'>
+        setAssets(items => items.filter(asset => asset.id !== deleted.id))
+        return
+      }
+      const changed = payload.new as Asset
+      setAssets(items => items.some(asset => asset.id === changed.id)
+        ? items.map(asset => asset.id === changed.id ? changed : asset)
+        : [changed, ...items])
+    }).subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [userId])
   useEffect(() => { localStorage.setItem('catAlerts', String(catAlerts)) }, [catAlerts])
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 2200); return () => window.clearTimeout(timer) }, [toast])
 
@@ -270,20 +293,65 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
     if (catAlerts) setToast({ kind, text: kind === 'income' ? 'Gelir eklendi' : 'Gider eklendi' })
   }
 
+  async function refreshBistPrices(sourceAssets = assets) {
+    const candidates = sourceAssets.filter(asset => (asset.kind === 'Hisse' || asset.kind === 'Fon') && asset.symbol.trim())
+    if (!candidates.length) return
+    try {
+      const quotes = await fetchBistPrices(candidates)
+      if (!quotes.length) return
+      await Promise.all(quotes.map(quote => supabase.from('assets').update({ current_price: quote.price }).eq('id', quote.id)))
+      setAssets(items => items.map(asset => {
+        const quote = quotes.find(item => item.id === asset.id)
+        return quote ? { ...asset, current_price: quote.price } : asset
+      }))
+    } catch (error) {
+      console.error('Piyasa fiyatları alınamadı.', error)
+    }
+  }
+
+  useEffect(() => {
+    if (page !== 'assets' || loading) return
+    let cancelled = false
+    let running = false
+    let timer: number | undefined
+    async function runRefresh() {
+      if (cancelled || running || document.visibilityState !== 'visible') return
+      running = true
+      try { await refreshBistPrices(assetsRef.current) } finally { running = false }
+    }
+    async function refreshLoop() {
+      await runRefresh()
+      if (!cancelled) timer = window.setTimeout(refreshLoop, 15000)
+    }
+    function refreshWhenVisible() { if (document.visibilityState === 'visible') void runRefresh() }
+    void refreshLoop()
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [page, loading])
+
   const title = nav.find(x => x.id === page)?.label
+  const subtitle = page === 'dashboard' ? 'Finansal durumunuza genel bakış' : page === 'transactions' ? 'Tüm gelir ve gider kayıtlarınız' : page === 'assets' ? 'Portföyünüz ve varlık dağılımınız' : ''
+  const topAction = page === 'assets'
+    ? { label: 'Varlık ekle', onClick: () => setAssetOpen(true) }
+    : { label: 'Yeni hareket', onClick: () => { setEditEntry(null); setEntryOpen(true) } }
   return <div className="app-shell sidebar-auto">
     <aside className="sidebar"><div className="logo"><span className="brand-mark">₺</span><span>Harcamaç</span></div><nav data-tour="navigation">{nav.map(item => <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => setPage(item.id)}><item.icon /> <span>{item.label}</span></button>)}</nav><div className="sidebar-user"><div className="avatar">{(session.user.user_metadata.full_name || session.user.email || 'H')[0].toUpperCase()}</div><div><b>{session.user.user_metadata.full_name || 'Hesabım'}</b><small>{session.user.email}</small></div><button title="Çıkış yap" onClick={() => supabase.auth.signOut()}><LogOut /></button></div></aside>
-    <main className="workspace"><header><div><span className="mobile-logo">Harcamaç</span><h1>{title}</h1><p>{page === 'dashboard' ? 'Finansal durumunuza genel bakış' : page === 'transactions' ? 'Tüm gelir ve gider kayıtlarınız' : ''}</p></div><div className="header-actions">{(page === 'transactions' || page === 'dashboard') && <button className="category-button" data-tour="category-action" title="Kategoriler" onClick={() => setCategoryOpen(true)}><Tags /><span>Kategoriler</span></button>}<button className="primary" data-tour="top-action" onClick={() => { setEditEntry(null); setEntryOpen(true) }}><Plus /> <span>Yeni hareket</span></button></div></header>
+    <main className="workspace"><header><div><span className="mobile-logo">Harcamaç</span><h1>{title}</h1><p>{subtitle}</p></div><div className="header-actions">{(page === 'transactions' || page === 'dashboard') && <button className="category-button" data-tour="category-action" title="Kategoriler" onClick={() => setCategoryOpen(true)}><Tags /><span>Kategoriler</span></button>}<button className="primary" data-tour="top-action" onClick={topAction.onClick}><Plus /> <span>{topAction.label}</span></button></div></header>
       {loading ? <div className="loading">Verileriniz getiriliyor…</div> : <>
         {page === 'dashboard' && <Dashboard entries={entries} assets={assets} />}
         {page === 'transactions' && <Transactions entries={entries} categories={categories} onEdit={e => { setEditEntry(e); setEntryOpen(true) }} onDelete={async id => { await supabase.from('entries').delete().eq('id', id); loadData() }} />}
         {page === 'recurring' && <Recurring entries={entries} onEdit={e => { setEditEntry(e); setEntryOpen(true) }} />}
-        {page === 'assets' && <Assets />}
+        {page === 'assets' && <Assets assets={assets} onDelete={async id => { await supabase.from('assets').delete().eq('id', id); loadData() }} />}
         {page === 'settings' && <SettingsPage theme={theme} setTheme={setTheme} email={session.user.email || ''} catAlerts={catAlerts} setCatAlerts={setCatAlerts} openCategories={() => setCategoryOpen(true)} openGuide={() => setGuideOpen(true)} />}
       </>}
     </main>
     <nav className="bottom-nav" data-tour="navigation">{nav.map(item => <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => setPage(item.id)}><item.icon/><span>{item.label}</span></button>)}</nav>
     {entryOpen && <EntryModal userId={userId} categories={categories} entry={editEntry} close={() => setEntryOpen(false)} saved={entrySaved} onCategoryAdded={category => setCategories(items => [...items, category].sort((left, right) => left.name.localeCompare(right.name, 'tr')))} />}
+    {assetOpen && <AssetModal userId={userId} close={() => setAssetOpen(false)} saved={() => { setAssetOpen(false); loadData() }} />}
     {categoryOpen && <CategoryModal userId={userId} categories={categories} close={() => setCategoryOpen(false)} reload={loadData} />}
     {setupOpen && <SetupModal userId={userId} close={() => setSetupOpen(false)} saved={() => { setSetupOpen(false); loadData() }} />}
     {guideOpen && <GuideModal goTo={setPage} showCategories={() => setCategoryOpen(true)} hideCategories={() => setCategoryOpen(false)} close={() => { setGuideOpen(false); setCategoryOpen(false) }} />}
@@ -328,7 +396,49 @@ function EntryRows({entries,actions}:{entries:Entry[];actions?:{onEdit:(e:Entry)
 
 function Recurring({entries,onEdit}:{entries:Entry[];onEdit:(e:Entry)=>void}) { const list=entries.filter(e=>e.cadence==='recurring'); const inc=list.filter(e=>e.kind==='income').reduce((s,e)=>s+Number(e.amount),0), exp=list.filter(e=>e.kind==='expense').reduce((s,e)=>s+Number(e.amount),0); return <div className="page-content"><section className="metric-grid two"><Metric label="Düzenli gelir" value={inc} tone="green"/><Metric label="Düzenli gider" value={exp} tone="red"/></section><section className="panel"><PanelTitle title="Düzenli hareketler" subtitle="Aylık planınız"/><EntryRows entries={list} actions={{onEdit,onDelete:()=>{}}}/></section></div> }
 
-function Assets() { return <div className="page-content"><section className="panel coming-soon"><div className="settings-icon"><WalletCards/></div><h2>Varlıklar geliştirme aşamasında</h2><p>Nakit, altın, hisse, kripto ve diğer varlıkları güncel fiyatlarla izleme bölümü hazırlanıyor. Bu ekran tamamlanana kadar varlık ekleme ve kaldırma işlemleri kapalı.</p></section></div> }
+function Assets({assets,onDelete}:{assets:Asset[];onDelete:(id:string)=>void}) {
+  const total = assets.reduce((sum, asset) => sum + Number(asset.units) * Number(asset.current_price), 0)
+  const cost = assets.reduce((sum, asset) => sum + Number(asset.units) * Number(asset.average_cost), 0)
+  const gain = total - cost
+  const gainRate = cost > 0 ? gain / cost * 100 : 0
+  const groups = Object.values(assets.reduce((acc, asset) => {
+    const key = asset.kind || 'Diğer'
+    acc[key] ||= { name: key, value: 0 }
+    acc[key].value += Number(asset.units) * Number(asset.current_price)
+    return acc
+  }, {} as Record<string,{name:string;value:number}>)).sort((a,b)=>b.value-a.value)
+  return <div className="page-content assets-page">
+    <section className="assets-portfolio">
+      <small>Toplam Varlığım</small>
+      <strong>{trMoney.format(total)}</strong>
+      <div className={`portfolio-change ${gain >= 0 ? 'positive' : 'negative'}`}><span>{gain >= 0 ? '+' : ''}{trMoney.format(gain)}</span><b>{gainRate.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%</b></div>
+      <div className="portfolio-meta"><span>Maliyet <b>{trMoney.format(cost)}</b></span><span>{assets.length.toLocaleString('tr-TR')} varlık</span></div>
+      {groups.length > 0 && <div className="portfolio-strip">{groups.map((group,index)=><i key={group.name} className={`type-${index % 6}`} style={{width:`${Math.max(5, total ? group.value / total * 100 : 0)}%`}} title={group.name}/>)}</div>}
+    </section>
+    <section className="assets-market">
+      <header><div><h2>Varlıklarım</h2><p>BIST hisse fiyatları Yahoo Finance üzerinden 15 dakika gecikmeli güncellenir.</p></div></header>
+      {assets.length ? <div className="asset-list">{assets.map(asset => <AssetRow key={asset.id} asset={asset} total={total} onDelete={onDelete}/>)}</div> : <Empty text="Henüz varlık eklenmedi."/>}
+    </section>
+    <section className="asset-chips">
+      {groups.map((group,index)=><div key={group.name}><span className={`asset-type type-${index % 6}`}>{group.name.slice(0,2).toLocaleUpperCase('tr')}</span><b>{group.name}</b><small>{total ? Math.round(group.value / total * 100) : 0}%</small></div>)}
+    </section>
+  </div>
+}
+
+function AssetRow({asset,total,onDelete}:{asset:Asset;total:number;onDelete:(id:string)=>void}) {
+  const value = Number(asset.units) * Number(asset.current_price)
+  const cost = Number(asset.units) * Number(asset.average_cost)
+  const gain = value - cost
+  const rate = cost > 0 ? gain / cost * 100 : 0
+  const share = total > 0 ? value / total * 100 : 0
+  return <div className="asset-row">
+    <div className="asset-symbol"><b>{(asset.symbol || asset.name).slice(0,3).toLocaleUpperCase('tr')}</b><small>{asset.kind}</small></div>
+    <div className="asset-main"><b>{asset.name}</b><span>{Number(asset.units).toLocaleString('tr-TR')} adet · {share.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}% portföy</span></div>
+    <div className="asset-value"><b>{trMoney.format(value)}</b><span>Ort. {trMoney.format(Number(asset.average_cost))}</span></div>
+    <div className={`asset-gain ${gain >= 0 ? 'positive' : 'negative'}`}><b>{gain >= 0 ? '+' : ''}{trMoney.format(gain)}</b><span>{rate.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%</span></div>
+    <button className="icon-button subtle danger" title="Varlığı sil" onClick={()=>confirm('Bu varlık silinsin mi?')&&onDelete(asset.id)}><Trash2/></button>
+  </div>
+}
 
 function SettingsPage({theme,setTheme,email,catAlerts,setCatAlerts,openCategories,openGuide}:{theme:'light'|'dark';setTheme:(x:'light'|'dark')=>void;email:string;catAlerts:boolean;setCatAlerts:(x:boolean)=>void;openCategories:()=>void;openGuide:()=>void}) { const [message,setMessage]=useState(''); async function resetPassword(){const redirectTo=new URL(import.meta.env.BASE_URL,window.location.origin).toString();const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo});setMessage(error?.message||'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.')} return <div className="page-content settings-page"><section className="panel settings-list"><div className="settings-row" data-tour="settings"><span className="settings-icon">{theme==='light'?<Sun/>:<Moon/>}</span><span><b>Görünüm</b><small>{theme==='light'?'Açık tema':'Koyu tema'}</small></span><label className="switch"><input type="checkbox" checked={theme==='dark'} onChange={e=>setTheme(e.target.checked?'dark':'light')}/><span/></label></div><div className="settings-row"><span className="settings-icon"><img src={`${import.meta.env.BASE_URL}happy-cat.png`} alt="" /></span><span><b>Kedi bildirimi</b><small>Gelir ve gider kaydında görsel bildirim göster</small></span><label className="switch"><input type="checkbox" checked={catAlerts} onChange={e=>setCatAlerts(e.target.checked)}/><span/></label></div><button onClick={openGuide}><span className="settings-icon"><HelpCircle/></span><span><b>Nasıl kullanılır?</b><small>Ekran üzerinde adım adım göster</small></span><ChevronRight/></button><button onClick={openCategories}><span className="settings-icon"><Tags/></span><span><b>Kategoriler</b><small>Gelir ve gider kategorilerini yönetin</small></span><ChevronRight/></button><button onClick={resetPassword}><span className="settings-icon"><KeyRound/></span><span><b>Şifre sıfırla</b><small>{email}</small></span><ChevronRight/></button>{message&&<div className="settings-message">{message}</div>}<button onClick={()=>supabase.auth.signOut()}><span className="settings-icon"><LogOut/></span><span><b>Çıkış yap</b><small>{email}</small></span><ChevronRight/></button></section></div> }
 
@@ -377,6 +487,49 @@ function CategoryModal({userId,categories,close,reload}:{userId:string;categorie
   return <Modal title="Kategoriler" close={close}><form className="category-add" onSubmit={save}>{editingId&&<b className="category-form-title">Kategoriyi düzenle</b>}<input required maxLength={60} placeholder="Kategori adı" value={name} onChange={e=>setName(e.target.value)}/><input aria-label="Kategori rengi" type="color" value={color} onChange={e=>setColor(e.target.value)}/><select value={kind} onChange={e=>setKind(e.target.value as FlowKind)}><option value="expense">Gider</option><option value="income">Gelir</option></select><label><input type="checkbox" checked={one} onChange={e=>setOne(e.target.checked)}/> Tek seferlik</label><label><input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/> Düzenli</label><div className="category-form-actions">{editingId&&<button type="button" onClick={resetForm}>Vazgeç</button>}<button className="primary" disabled={busy||!name.trim()||(!one&&!recurring)}>{editingId?<Pencil/>:<Plus/>}{busy?'Kaydediliyor…':editingId?'Kaydet':'Ekle'}</button></div></form><div className="category-list">{categories.map((category,index)=><div className="category-swipe" data-tour={index===0?'category-list':undefined} key={category.id}><div className="category-list-row"><span className="color-dot" style={{background:category.color}}/><b>{category.name}</b><small>{category.kind==='income'?'Gelir':'Gider'} · {[category.one_time&&'Tek seferlik',category.recurring&&'Düzenli'].filter(Boolean).join(', ')}</small></div><div className="category-swipe-actions"><button title="Kategoriyi düzenle" onClick={()=>edit(category)}><Pencil/><span>Düzenle</span></button><button className="danger" title="Kategoriyi kaldır" onClick={async()=>{if(confirm('Kategori kaldırılsın mı?')){await supabase.from('categories').delete().eq('id',category.id);if(editingId===category.id)resetForm();reload()}}}><Trash2/><span>Sil</span></button></div></div>)}</div></Modal>
 }
 
-function AssetModal({userId,close,saved}:{userId:string;close:()=>void;saved:()=>void}) { const [name,setName]=useState(''),[symbol,setSymbol]=useState(''),[kind,setKind]=useState('Nakit'),[units,setUnits]=useState(''),[price,setPrice]=useState(''); async function submit(e:FormEvent){e.preventDefault();const {error}=await supabase.from('assets').insert({user_id:userId,name,symbol:symbol.toUpperCase(),kind,units:Number(units),average_cost:Number(price),current_price:Number(price)});if(error)alert(error.message);else saved()} return <Modal title="Varlık ekle" close={close}><form className="form-grid" onSubmit={submit}><label>Varlık adı<input required value={name} onChange={e=>setName(e.target.value)}/></label><label>Sembol<input maxLength={12} value={symbol} onChange={e=>setSymbol(e.target.value)}/></label><label>Tür<select value={kind} onChange={e=>setKind(e.target.value)}>{['Nakit','Banka','Hisse','Altın','Kripto','Diğer'].map(x=><option key={x}>{x}</option>)}</select></label><label>Adet / miktar<input required type="number" min="0" step="any" value={units} onChange={e=>setUnits(e.target.value)}/></label><label>Güncel birim fiyat<input required type="number" min="0" step="any" value={price} onChange={e=>setPrice(e.target.value)}/></label><div className="form-actions full"><button type="button" onClick={close}>Vazgeç</button><button className="primary">Kaydet</button></div></form></Modal> }
+type AssetDraft = {
+  step?: number
+  kind?: string
+  exchange?: string
+  query?: string
+  purchaseDate?: string
+  units?: string
+  price?: string
+  selected?: Pick<AssetCatalogItem, 'kind' | 'symbol' | 'exchange' | 'dataSource'>
+}
+
+function AssetModal({userId,close,saved}:{userId:string;close:()=>void;saved:()=>void}) {
+  const kinds = [
+    { name: 'Hisse', icon: TrendingUp },
+    { name: 'Altın', icon: Gem },
+    { name: 'Kripto', icon: Bitcoin },
+    { name: 'Fon', icon: Landmark },
+    { name: 'Döviz', icon: CircleDollarSign }
+  ]
+  const initialDraft=useMemo<AssetDraft>(()=>{try{return JSON.parse(sessionStorage.getItem('harcamac-asset-draft')||'{}')}catch{return {}}},[])
+  const restoredSelected=initialDraft.selected?assetCatalog.find(item=>item.kind===initialDraft.selected?.kind&&item.symbol===initialDraft.selected?.symbol&&item.exchange===initialDraft.selected?.exchange&&item.dataSource===initialDraft.selected?.dataSource)||null:null
+  const [step,setStep]=useState(initialDraft.step||0),[kind,setKind]=useState(initialDraft.kind||'Hisse'),[exchange,setExchange]=useState(initialDraft.exchange??'BIST'),[query,setQuery]=useState(initialDraft.query||''),[selected,setSelected]=useState<AssetCatalogItem|null>(restoredSelected),[purchaseDate,setPurchaseDate]=useState(initialDraft.purchaseDate||today),[units,setUnits]=useState(initialDraft.units||''),[price,setPrice]=useState(initialDraft.price||''),[busy,setBusy]=useState(false),[message,setMessage]=useState('')
+  const hasExchangeStep=kind==='Hisse'
+  const steps=hasExchangeStep?['Tür','Borsa','Sembol','Alış','Adet']:['Tür','Sembol','Alış','Adet']
+  const symbolStep=hasExchangeStep?2:1, purchaseStep=symbolStep+1, unitsStep=symbolStep+2
+  const priceCurrency=exchange==='NASDAQ'||exchange==='NYSE'||exchange==='ABD'?'$':exchange==='AVRUPA'?'€':'₺'
+  const markets=[{id:'BIST',name:'Borsa İstanbul',note:'Türkiye'},{id:'NASDAQ',name:'NASDAQ',note:'Yakında',disabled:true},{id:'NYSE',name:'NYSE',note:'Yakında',disabled:true},{id:'AVRUPA',name:'Avrupa',note:'Yakında',disabled:true}]
+  const matches=useMemo(()=>assetCatalog.filter(item=>item.kind===kind&&(!hasExchangeStep||item.exchange===exchange)&&(item.name.toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr'))||item.symbol.toLocaleLowerCase('tr').includes(query.toLocaleLowerCase('tr')))),[kind,exchange,hasExchangeStep,query])
+  useEffect(()=>{sessionStorage.setItem('harcamac-asset-draft',JSON.stringify({step,kind,exchange,query,purchaseDate,units,price,selected:selected?{kind:selected.kind,symbol:selected.symbol,exchange:selected.exchange,dataSource:selected.dataSource}:undefined}))},[step,kind,exchange,query,purchaseDate,units,price,selected])
+  useEffect(()=>{if(!selected||!purchaseDate)return;let cancelled=false;setBusy(true);setMessage('');fetchHistoricalAssetPrice(selected,purchaseDate).then(value=>{if(cancelled)return;if(value){setPrice(String(value));setMessage('Alış tarihindeki fiyat dolduruldu.')}}).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:'Bu tarih için fiyat bulunamadı, elle girebilirsin.')}).finally(()=>{if(!cancelled)setBusy(false)});return()=>{cancelled=true}},[selected,purchaseDate])
+  function chooseKind(value:string){setKind(value);setExchange(value==='Hisse'?'BIST':'');setStep(0);setSelected(null);setQuery('');setPrice('');setMessage('')}
+  function chooseExchange(value:string){setExchange(value);setSelected(null);setQuery('');setPrice('');setMessage('')}
+  function clearAndClose(){sessionStorage.removeItem('harcamac-asset-draft');close()}
+  async function submit(e:FormEvent){e.preventDefault();if(!selected||!units||!price)return;setBusy(true);const payload={user_id:userId,name:selected.name,symbol:selected.symbol.toUpperCase(),kind:selected.kind,units:Number(units),average_cost:Number(price),current_price:Number(price),purchase_date:purchaseDate};const {error}=await supabase.from('assets').insert(payload);setBusy(false);if(error)alert(error.message);else{sessionStorage.removeItem('harcamac-asset-draft');saved()}}
+  return <Modal title="Varlık ekle" close={clearAndClose}><form className="asset-wizard" onSubmit={submit}>
+    <div className="wizard-steps" style={{gridTemplateColumns:`repeat(${steps.length}, minmax(0, 1fr))`}}>{steps.map((label,index)=><span key={label} className={index===step?'active':index<step?'done':''}>{index+1}<b>{label}</b></span>)}</div>
+    {step===0&&<section className="wizard-pane asset-kind-grid">{kinds.map(item=><button type="button" key={item.name} className={kind===item.name?'active':''} onClick={()=>chooseKind(item.name)}><item.icon/><span>{item.name}</span></button>)}</section>}
+    {hasExchangeStep&&step===1&&<section className="wizard-pane asset-kind-grid asset-market-grid">{markets.map(market=><button type="button" key={market.id} disabled={market.disabled} className={exchange===market.id?'active':''} onClick={()=>chooseExchange(market.id)}><WalletCards/><span>{market.name}</span><small>{market.note}</small></button>)}</section>}
+    {step===symbolStep&&<section className="wizard-pane"><label className="search asset-search"><Search/><input placeholder={`${kind} ara`} value={query} onChange={e=>setQuery(e.target.value)}/></label><div className="symbol-results">{matches.slice(0,150).map(item=><button type="button" key={`${item.kind}-${item.exchange||'global'}-${item.dataSource||'yahoo'}-${item.symbol}`} className={selected===item?'active':''} onClick={()=>setSelected(item)}><b>{item.symbol}</b><span>{item.name}</span></button>)}</div>{matches.length>150&&<small className="result-limit">{matches.length.toLocaleString('tr-TR')} sonuç içinde arama yapabilirsin.</small>}</section>}
+    {step===purchaseStep&&<section className="wizard-pane form-grid compact purchase-grid"><label className="full">Seçilen varlık<input className="selected-asset-input" readOnly aria-disabled="true" tabIndex={-1} value={selected?`${selected.symbol} - ${selected.name}`:''}/></label><label className="purchase-field">Alış tarihi<input required type="date" max={today} value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value>today?today:e.target.value)}/><small className="field-hint field-hint-spacer" aria-hidden="true">&nbsp;</small></label><label className="purchase-field">Alış fiyatı<div className="price-input"><input required type="number" min="0" step="any" value={price} onChange={e=>setPrice(e.target.value)}/><span>{priceCurrency}</span></div><small className="field-hint">Otomatik gelen fiyatı istersen düzeltebilirsin.</small></label>{message&&<div className="form-message full">{message}</div>}</section>}
+    {step===unitsStep&&<section className="wizard-pane form-grid compact"><label className="full">Adet / miktar<input required type="number" min="0" step="any" value={units} onChange={e=>setUnits(e.target.value)}/></label><div className="asset-preview full"><b>{selected?.name}</b><span>{Number(units||0).toLocaleString('tr-TR')} adet · {price?trMoney.format(Number(price)):'-'}</span><strong>{trMoney.format(Number(units||0)*Number(price||0))}</strong></div></section>}
+    <div className="form-actions full"><button type="button" onClick={step===0?clearAndClose:()=>setStep(step-1)}>{step===0?'Vazgeç':'Geri'}</button>{step<unitsStep?<button type="button" className="primary" disabled={(step===1&&hasExchangeStep&&!exchange)||(step===symbolStep&&!selected)||(step===purchaseStep&&(!price||busy))} onClick={()=>setStep(step+1)}>Devam</button>:<button className="primary" disabled={busy||!selected||!units||!price}>{busy?'Kaydediliyor...':'Kaydet'}</button>}</div>
+  </form></Modal>
+}
 function Modal({title,close,children,locked=false}:{title:string;close:()=>void;children:React.ReactNode;locked?:boolean}) { return <div className="modal-backdrop" onMouseDown={e=>!locked&&e.target===e.currentTarget&&close()}><section className="modal"><header><h2>{title}</h2>{!locked&&<button className="icon-button" onClick={close}><X/></button>}</header>{children}</section></div> }
 function Empty({text}:{text:string}) { return <div className="empty"><WalletCards/><p>{text}</p></div> }

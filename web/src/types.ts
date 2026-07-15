@@ -14,7 +14,7 @@ export interface Category {
 
 export interface Asset {
   id: string; user_id: string; name: string; symbol: string; kind: string;
-  units: number; average_cost: number; current_price: number; created_at?: string
+  units: number; average_cost: number; current_price: number; purchase_date?: string | null; created_at?: string
 }
 
 export const defaultCategories: Omit<Category, 'id' | 'user_id'>[] = [
