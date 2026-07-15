@@ -631,8 +631,8 @@ type AssetDraft = {
   selected?: Pick<AssetCatalogItem, 'kind' | 'symbol' | 'exchange' | 'dataSource'>
 }
 
-function GoldBarIcon() { return <span className="gold-bar-icon" aria-hidden="true"><i/><i/><i/></span> }
-function CurrencyPairIcon() { return <span className="currency-pair-icon" aria-hidden="true"><b>$</b><b>€</b></span> }
+function GoldBarIcon() { return <span className="gold-bar-icon" aria-hidden="true"><i/></span> }
+function CurrencyPairIcon() { return <span className="currency-pair-icon" aria-hidden="true"><b className="turkish-lira-symbol">₺</b><b>$</b><b>€</b></span> }
 
 function AssetModal({userId,assets,close,saved,assetsChanged}:{userId:string;assets:Asset[];close:()=>void;saved:()=>void;assetsChanged:()=>void}) {
   const kinds = [
