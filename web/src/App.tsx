@@ -85,12 +85,51 @@ function compactChartTick(value:number) {
   return value.toLocaleString('tr-TR',{maximumFractionDigits:2})
 }
 
+function localDate(value:string) {
+  return new Date(`${value}T12:00:00`)
+}
+
+function dateKey(date:Date) {
+  const year=date.getFullYear(), month=String(date.getMonth()+1).padStart(2,'0'), day=String(date.getDate()).padStart(2,'0')
+  return `${year}-${month}-${day}`
+}
+
+function monthEnd(year:number,month:number) {
+  return new Date(year,month+1,0,12)
+}
+
+function recurringOccurrence(entry:Entry,year:number,month:number) {
+  if(entry.cadence!=='recurring')return null
+  const start=localDate(entry.entry_date), end=monthEnd(year,month)
+  if(start>end)return null
+  const day=Math.min(start.getDate(),end.getDate())
+  return new Date(year,month,day,12)
+}
+
+function effectiveEntriesInRange(entries:Entry[],start:Date,end:Date) {
+  const from=new Date(start.getFullYear(),start.getMonth(),start.getDate(),0,0,0,0)
+  const to=new Date(end.getFullYear(),end.getMonth(),end.getDate(),23,59,59,999)
+  return entries.flatMap(entry=>{
+    if(entry.cadence!=='recurring'){
+      const date=localDate(entry.entry_date)
+      return date>=from&&date<=to?[entry]:[]
+    }
+    const result:Entry[]=[]
+    for(let cursor=new Date(from.getFullYear(),from.getMonth(),1,12);cursor<=to;cursor.setMonth(cursor.getMonth()+1)){
+      const occurrence=recurringOccurrence(entry,cursor.getFullYear(),cursor.getMonth())
+      if(!occurrence||occurrence<from||occurrence>to)continue
+      result.push({...entry,id:`${entry.id}:${dateKey(occurrence)}`,entry_date:dateKey(occurrence)})
+    }
+    return result
+  })
+}
+
+function currentMonthlyEntries(entries: Entry[], now = new Date()) {
+  return effectiveEntriesInRange(entries,new Date(now.getFullYear(),now.getMonth(),1,12),monthEnd(now.getFullYear(),now.getMonth()))
+}
+
 function currentMonthlyBalance(entries: Entry[]) {
-  const now = new Date()
-  return entries.filter(entry => {
-    const date = new Date(`${entry.entry_date}T12:00:00`)
-    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-  }).reduce((sum, entry) => sum + (entry.kind === 'income' ? Number(entry.amount) : -Number(entry.amount)), 0)
+  return currentMonthlyEntries(entries).reduce((sum, entry) => sum + (entry.kind === 'income' ? Number(entry.amount) : -Number(entry.amount)), 0)
 }
 
 function resolvedAssetValue(asset: Asset) {
@@ -522,7 +561,7 @@ function FinanceApp({ session, theme, setTheme }: { session: Session; theme:'lig
 }
 
 function Dashboard({ entries, assets }: { entries: Entry[]; assets: Asset[] }) {
-  const now = new Date(), current = entries.filter(e => { const d = new Date(e.entry_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() })
+  const current = currentMonthlyEntries(entries)
   const income = current.filter(e => e.kind === 'income').reduce((s,e) => s + Number(e.amount), 0)
   const expense = current.filter(e => e.kind === 'expense').reduce((s,e) => s + Number(e.amount), 0)
   const assetTotal = mergeAssetPositions(assets).reduce((sum, asset) => sum + resolvedAssetValue(asset), 0)
@@ -539,8 +578,8 @@ function PanelTitle({title,subtitle,icon}:{title:string;subtitle:string;icon?:Re
 function ChartHeader({widget}:{widget:ChartWidget}) { return <div className="panel-title chart-toolbar"><div>{widget.chart==='pie'?<PieIcon/>:<BarChart3/>}<span><b>{widget.title}</b><small>{rangeLabel(widget.range)} · {metricLabel(widget.metric)}</small></span></div></div> }
 function rangeLabel(range:ChartRange){return range==='month'?'Bu ay':range==='week'?'Bu hafta':'Tüm zamanlar'}
 function metricLabel(metric:ChartMetric){return metric==='income'?'Gelir':metric==='expense'?'Gider':metric==='categoryExpense'?'Kategoriye göre gider':'Gelir ve gider'}
-function filterRange(entries:Entry[],range:ChartRange){const now=new Date();return entries.filter(e=>{const d=new Date(`${e.entry_date}T12:00:00`);if(range==='all')return true;if(range==='month')return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();const start=new Date(now);start.setDate(now.getDate()-6);return d>=start&&d<=now})}
-function chartData(widget:ChartWidget,entries:Entry[]){const list=filterRange(entries,widget.range);if(widget.metric==='categoryExpense')return Object.values(list.filter(e=>e.kind==='expense').reduce((a,e)=>{const key=e.category_name||'Diğer';a[key]||={name:key,value:0,color:e.category_color||'#7b837e'};a[key].value+=Number(e.amount);return a},{} as Record<string,{name:string;value:number;color:string}>)).sort((a,b)=>b.value-a.value);if(widget.range==='all'){return Array.from({length:6},(_,i)=>{const d=new Date(new Date().getFullYear(),new Date().getMonth()-5+i,1);const month=list.filter(e=>{const x=new Date(`${e.entry_date}T12:00:00`);return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear()});return {name:d.toLocaleDateString('tr-TR',{month:'short'}),Gelir:month.filter(e=>e.kind==='income').reduce((s,e)=>s+Number(e.amount),0),Gider:month.filter(e=>e.kind==='expense').reduce((s,e)=>s+Number(e.amount),0)}})}return Object.values(list.reduce((a,e)=>{const key=new Date(`${e.entry_date}T12:00:00`).toLocaleDateString('tr-TR',{day:'numeric',month:'short'});a[key]||={name:key,Gelir:0,Gider:0};a[key][e.kind==='income'?'Gelir':'Gider']+=Number(e.amount);return a},{} as Record<string,{name:string;Gelir:number;Gider:number}>))}
+function filterRange(entries:Entry[],range:ChartRange){const now=new Date();if(range==='month')return currentMonthlyEntries(entries,now);if(range==='week'){const start=new Date(now);start.setDate(now.getDate()-6);return effectiveEntriesInRange(entries,start,now)}const start=new Date(now.getFullYear(),now.getMonth()-5,1,12);return effectiveEntriesInRange(entries,start,monthEnd(now.getFullYear(),now.getMonth()))}
+function chartData(widget:ChartWidget,entries:Entry[]){const list=filterRange(entries,widget.range);if(widget.metric==='categoryExpense')return Object.values(list.filter(e=>e.kind==='expense').reduce((a,e)=>{const key=e.category_name||'Diğer';a[key]||={name:key,value:0,color:e.category_color||'#7b837e'};a[key].value+=Number(e.amount);return a},{} as Record<string,{name:string;value:number;color:string}>)).sort((a,b)=>b.value-a.value);if(widget.range==='all'){return Array.from({length:6},(_,i)=>{const d=new Date(new Date().getFullYear(),new Date().getMonth()-5+i,1);const month=list.filter(e=>{const x=localDate(e.entry_date);return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear()});return {name:d.toLocaleDateString('tr-TR',{month:'short'}),Gelir:month.filter(e=>e.kind==='income').reduce((s,e)=>s+Number(e.amount),0),Gider:month.filter(e=>e.kind==='expense').reduce((s,e)=>s+Number(e.amount),0)}})}return Object.values(list.reduce((a,e)=>{const key=localDate(e.entry_date).toLocaleDateString('tr-TR',{day:'numeric',month:'short'});a[key]||={name:key,Gelir:0,Gider:0};a[key][e.kind==='income'?'Gelir':'Gider']+=Number(e.amount);return a},{} as Record<string,{name:string;Gelir:number;Gider:number}>))}
 function ChartBody({widget,entries}:{widget:ChartWidget;entries:Entry[]}) {
   const data=chartData(widget,entries), colors=['#dc5b4f','#e7a23d','#418a73','#477ea8','#8b69a8','#6b7c55']
   const total=data.reduce((sum:any,item:any)=>sum+Number(item.value||0),0)
